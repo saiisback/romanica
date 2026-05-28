@@ -1,4 +1,4 @@
-import { test, expect, beforeAll } from "bun:test";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { randomUUID } from "node:crypto";
 import type { CostAnalytics, LatencyAnalytics, Page, TraceDetail, TraceSummary } from "@romanica/shared";
 import { createApp } from "../src/app.ts";
@@ -62,7 +62,7 @@ beforeAll(async () => {
   if (res.status !== 200) throw new Error(`seed ingest failed: ${res.status}`);
 });
 
-test("cleanup", async () => {
+afterAll(async () => {
   await sql`DELETE FROM traces WHERE trace_id = ${traceId}`;
 });
 

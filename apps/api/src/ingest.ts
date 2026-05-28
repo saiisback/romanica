@@ -3,9 +3,16 @@ import { sql } from "./db.ts";
 import { storeBlob } from "./storage.ts";
 import { rollupTrace, spanDurationMs } from "./rollup.ts";
 
-/** JSON-encode a value for a jsonb param, or null. Pair with `::jsonb` in SQL. */
-const j = (v: unknown): string | null =>
-  v === null || v === undefined ? null : JSON.stringify(v);
+/**
+ * Bind any JSON value to a jsonb column.
+ * Bun sends objects/arrays/strings as untyped params that coerce straight into
+ * jsonb; numbers/booleans must go through `to_jsonb()`. null/undefined -> NULL.
+ */
+const jb = (v: unknown) => {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number" || typeof v === "boolean") return sql`to_jsonb(${v})`;
+  return v;
+};
 
 const ts = (ms: number | undefined): Date | null => (ms === undefined ? null : new Date(ms));
 
@@ -48,7 +55,7 @@ export async function ingestPayload(
         ) VALUES (
           ${trace.traceId}, ${projectId}, ${trace.name}, ${trace.status},
           ${new Date(trace.startTime)}, ${ts(trace.endTime)}, ${rollup.durationMs},
-          ${j(trace.metadata)}::jsonb, ${rollup.totalTokens}, ${rollup.totalCostUsd},
+          ${jb(trace.metadata)}, ${rollup.totalTokens}, ${rollup.totalCostUsd},
           ${rollup.spanCount}
         )
         ON CONFLICT (trace_id) DO UPDATE SET
@@ -72,9 +79,9 @@ export async function ingestPayload(
             ${span.spanId}, ${trace.traceId}, ${projectId}, ${span.parentSpanId ?? null},
             ${span.type}, ${span.name}, ${span.status},
             ${new Date(span.startTime)}, ${ts(span.endTime)}, ${spanDurationMs(span)},
-            ${j(input.inline)}::jsonb, ${j(output.inline)}::jsonb,
+            ${jb(input.inline)}, ${jb(output.inline)},
             ${input.ref}, ${output.ref},
-            ${j(span.error ?? null)}::jsonb, ${j(span.attributes)}::jsonb
+            ${jb(span.error ?? null)}, ${jb(span.attributes)}
           )
           ON CONFLICT (span_id) DO UPDATE SET
             parent_span_id = EXCLUDED.parent_span_id,
