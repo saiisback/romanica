@@ -215,18 +215,19 @@ const model = wrapAISDK(openai("gpt-4o")); // spans emitted automatically
 ## 8. Proposed repo structure
 
 ```txt
-romanica/
+romanica/                    # Bun workspace root
 ├── packages/
-│   ├── sdk/                 # @romanica/sdk (TS)
-│   │   ├── src/core/        # trace/span primitives, batching, export
-│   │   └── src/adapters/    # vercel, langchain auto-instrumentation
-│   └── shared/              # shared types (span schema) used by sdk + api + web
+│   ├── shared/              # @romanica/shared — span schema, pricing, tree (source of truth)
+│   └── sdk/                 # @romanica/sdk — trace()/span() primitives, batched export
+│                            #   (adapters/ for vercel + langchain land in M6)
 ├── apps/
-│   ├── api/                 # ingest + query API (TS)
-│   └── web/                 # dashboard (Next.js)
+│   ├── api/                 # ingest + query API (Hono on Bun.serve)
+│   └── web/                 # dashboard (Next.js App Router)
 ├── db/
-│   └── migrations/          # Postgres schema
-└── layer-4-observability.md # this doc
+│   └── migrations/          # Postgres schema (0001_init.sql)
+├── scripts/                 # migrate.ts, seed.ts, smoke.ts (Bun)
+├── docs/                    # this doc + BUILD.md + romanica.md
+└── docker-compose.yml       # Postgres (:5433) + MinIO (:9000/:9001)
 ```
 
 `packages/shared` holding the span schema = one source of truth across SDK, API, and dashboard (the TS-everywhere velocity win).
@@ -235,18 +236,36 @@ romanica/
 
 ## 9. Build order (milestones)
 
-| # | Milestone | Deliverable |
-|---|-----------|-------------|
-| M0 | **Schema + scaffold** | Monorepo, `shared` span types, Postgres migrations for `projects`/`traces`/`spans`. |
-| M1 | **SDK core** | `trace()` + `span()` primitives, batching, async export. Emits to a local endpoint. |
-| M2 | **Ingest API** | `POST /v1/traces`, auth by API key, write to Postgres + object store. |
-| M3 | **Query API** | trace list + trace detail endpoints. |
-| M4 | **Dashboard: trace tree** | The core view — list runs, open one, see the span tree + input/output. **First "wow".** |
-| M5 | **Cost + latency** | LLM token/cost rollups, latency waterfall. |
-| M6 | **Auto-instrument** | Vercel AI SDK adapter (then LangChain.js). <10-line integration. |
-| M7 | **Failure replay (P2)** | Re-run a failed trace from captured inputs. |
+| # | Milestone | Deliverable | Status |
+|---|-----------|-------------|--------|
+| M0 | **Schema + scaffold** | Bun monorepo, `shared` span types, Postgres migrations for `projects`/`traces`/`spans`. | ✅ Done |
+| M1 | **SDK core** | `trace()` + `span()` primitives, auto-nesting (AsyncLocalStorage), buffered + batched async export, fail-silent. | ✅ Done |
+| M2 | **Ingest API** | `POST /v1/traces`, API-key auth, write to Postgres + S3/MinIO (blob offload >16KB), cost rollup. | ✅ Done |
+| M3 | **Query API** | trace list (keyset paginated), trace detail with span tree, cost + latency analytics endpoints. | ✅ Done |
+| M4 | **Dashboard: trace tree** | The core view — list runs, open one, see the span tree + waterfall + input/output. **First "wow".** | ✅ Done |
+| M5 | **Cost + latency** | Dedicated dashboard views over the existing analytics endpoints (token/cost over time, latency distribution). | ⬜ Next |
+| M6 | **Auto-instrument** | Vercel AI SDK adapter (then LangChain.js). <10-line integration. | ⬜ Planned |
+| M7 | **Failure replay (P2)** | Re-run a failed trace from captured inputs. | ⬜ Planned |
 
 M0–M4 = the demoable MVP. M5–M6 = make it sticky. M7 = the second wow.
+
+### Build status (2026-05-29)
+
+**M0–M4 are built, typecheck clean, and verified** — 14 tests pass (5 SDK unit + 9 API
+integration against live Postgres + MinIO), plus an end-to-end smoke (real SDK →
+HTTP → DB) and a live dashboard render. The demoable MVP is complete.
+
+What shipped beyond the original sketch, worth recording:
+- **Runtime is Bun**, not Node — `shared` is consumed as raw `.ts` (no build step);
+  the API runs on `Bun.serve`; Postgres + S3 use Bun-native clients.
+- **Postgres dev port is `5433`** (container remapped to avoid clashing with a local
+  Postgres on 5432).
+- **jsonb gotcha (solved):** Bun's PG driver double-encodes `JSON.stringify(obj)::jsonb`
+  into a jsonb *string*, silently breaking `->>` queries. Objects/arrays/strings/null
+  must be bound directly (no cast); numbers/booleans go through `to_jsonb()`. Handled by
+  a `jb()` binder in the ingest path.
+- **Pricing/cost** lives in `shared` (`MODEL_PRICES` + `estimateCostUsd`), so the SDK can
+  estimate cost client-side and the API can roll it up consistently.
 
 ---
 
