@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgres://romanica:romanica@localhost:5432/romanica";
+  process.env.DATABASE_URL ?? "postgres://romanica:romanica@127.0.0.1:5433/romanica";
 
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 
