@@ -1,5 +1,3 @@
-# Romanica
-
 ![Romanica](./assets/readme-hero.png)
 
 > **AWS + Kubernetes + Datadog + Temporal for autonomous AI systems.**
