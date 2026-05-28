@@ -49,6 +49,6 @@ Useful scripts:
 
 - [x] **M0** — monorepo, shared span schema, Postgres migrations
 - [x] **M1** — SDK core (`trace()` / `span()`, batched async export)
-- [ ] M2 — Ingest API (`POST /v1/traces`)
+- [x] **M2** — Ingest API (`POST /v1/traces`, auth, S3 blob offload, cost rollup)
 - [ ] M3 — Query API (list / detail / analytics)
 - [ ] M4 — Dashboard: trace tree viewer
