@@ -1,74 +1,45 @@
 @import "tailwindcss";
 
-/* ---- Romanica landing palette: black / red / ember ---- */
+/* ---- Romanica hero palette ---- */
 @theme {
-  --color-ink: #ededed;
-  --color-muted: #8b8b8e;
-  --color-faint: #5a5a5e;
-  --color-base: #08080a;
-  --color-panel: #0e0e11;
-  --color-line: #1c1c20;
+  --color-cream: #f3e7df;
+  --color-cream-dim: #e7cfc4;
+  --color-faint: #d8b2a3;
 
-  --color-ember: #ff5a1f; /* orange */
-  --color-flame: #ff8a3d; /* light orange */
-  --color-blood: #ff2d20; /* red */
-
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+  --font-serif: var(--font-serif), Georgia, "Times New Roman", serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
 }
 
 :root {
   color-scheme: dark;
 }
 
-html {
-  scroll-behavior: smooth;
-}
-
 html,
 body {
-  background-color: var(--color-base);
-  color: var(--color-ink);
+  background-color: #2e0a06;
+  color: var(--color-cream);
   font-family: var(--font-sans);
 }
 
-/* subtle dotted-grid backdrop */
-.bg-grid {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 22px 22px;
-  background-position: center;
+/* readability scrim over the hero image — darkens edges, keeps the hands lit */
+.hero-scrim {
+  background:
+    radial-gradient(58% 46% at 50% 50%, rgba(46, 10, 6, 0.55) 0%, rgba(46, 10, 6, 0) 72%),
+    linear-gradient(
+      180deg,
+      rgba(28, 7, 4, 0.6) 0%,
+      rgba(28, 7, 4, 0) 26%,
+      rgba(28, 7, 4, 0) 70%,
+      rgba(28, 7, 4, 0.72) 100%
+    );
 }
 
-/* ember glow used behind the hero */
-.glow-ember {
-  background: radial-gradient(
-    60% 50% at 50% 0%,
-    rgba(255, 90, 31, 0.22) 0%,
-    rgba(255, 45, 32, 0.08) 38%,
-    transparent 72%
-  );
-}
-
-.text-gradient {
-  background: linear-gradient(100deg, #ff8a3d 0%, #ff5a1f 45%, #ff2d20 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.btn-ember {
-  background: linear-gradient(180deg, #ff6a2c, #ff3d1a);
-  box-shadow: 0 0 0 1px rgba(255, 90, 31, 0.5), 0 8px 30px -8px rgba(255, 61, 26, 0.65);
-}
-.btn-ember:hover {
-  filter: brightness(1.08);
-}
-
-/* thin gradient hairline */
-.rule-ember {
-  background: linear-gradient(90deg, transparent, rgba(255, 90, 31, 0.6), transparent);
+.headline {
+  font-family: var(--font-serif);
+  text-shadow: 0 2px 40px rgba(255, 180, 150, 0.18);
 }
 
 ::selection {
-  background: rgba(255, 90, 31, 0.3);
+  background: rgba(255, 140, 100, 0.35);
 }

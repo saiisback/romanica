@@ -1,22 +1,29 @@
 import type { Metadata } from "next";
+import { Playfair_Display } from "next/font/google";
 import "./globals.css";
 
+const serif = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Romanica — Infrastructure for autonomous AI agents",
-  description:
-    "AWS + Kubernetes + Datadog + Temporal for autonomous AI systems. Trace every agent run, replay any failure, see what it cost.",
+  title: "Romanica",
+  description: "Imagine a space between vision & impact. That's where we thrive.",
   metadataBase: new URL("https://romanica.dev"),
   openGraph: {
-    title: "Romanica — Infrastructure for autonomous AI agents",
-    description:
-      "Trace every agent run, replay any failure, see what it cost. The operations layer for long-running cognitive workers.",
+    title: "Romanica",
+    description: "Imagine a space between vision & impact. That's where we thrive.",
     type: "website",
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={serif.variable}>
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   );
