@@ -47,6 +47,7 @@ export class Span {
   attributes: Record<string, unknown> = {};
 
   private ended = false;
+  private readonly now: () => number;
 
   constructor(
     private readonly trace: Trace,
@@ -55,6 +56,7 @@ export class Span {
     this.type = opts.type;
     this.name = opts.name;
     this.parentSpanId = opts.parentSpanId;
+    this.now = opts.now;
     this.startTime = opts.now();
   }
 
@@ -147,8 +149,20 @@ export class Span {
     return spanContext.run(this, () => this.trace.span(type, name, fn));
   }
 
-  /** @internal close the span and stamp its end time (idempotent). */
-  end(now: () => number): void {
+  /**
+   * Close the span and stamp its end time (idempotent). Used by manual
+   * (start/end-style) instrumentation such as the LangChain callback handler,
+   * where a span is opened and closed across separate events rather than around
+   * a single callback.
+   */
+  finish(): void {
+    if (this.ended) return;
+    this.ended = true;
+    this.endTime = this.now();
+  }
+
+  /** @internal close the span; `now` override kept for the callback-scoped path. */
+  end(now: () => number = this.now): void {
     if (this.ended) return;
     this.ended = true;
     this.endTime = now();

@@ -243,17 +243,44 @@ romanica/                    # Bun workspace root
 | M2 | **Ingest API** | `POST /v1/traces`, API-key auth, write to Postgres + S3/MinIO (blob offload >16KB), cost rollup. | ✅ Done |
 | M3 | **Query API** | trace list (keyset paginated), trace detail with span tree, cost + latency analytics endpoints. | ✅ Done |
 | M4 | **Dashboard: trace tree** | The core view — list runs, open one, see the span tree + waterfall + input/output. **First "wow".** | ✅ Done |
-| M5 | **Cost + latency** | Dedicated dashboard views over the existing analytics endpoints (token/cost over time, latency distribution). | ⬜ Next |
-| M6 | **Auto-instrument** | Vercel AI SDK adapter (then LangChain.js). <10-line integration. | ⬜ Planned |
-| M7 | **Failure replay (P2)** | Re-run a failed trace from captured inputs. | ⬜ Planned |
+| M5 | **Cost + latency** | Dedicated dashboard views over the existing analytics endpoints (token/cost over time, latency distribution). | ✅ Done |
+| M6 | **Auto-instrument** | Vercel AI SDK adapter (then LangChain.js). <10-line integration. | ✅ Done |
+| M7 | **Failure replay (P2)** | Re-run a failed trace from captured inputs. | ✅ Done |
 
 M0–M4 = the demoable MVP. M5–M6 = make it sticky. M7 = the second wow.
 
-### Build status (2026-05-29)
+### Build status (2026-06-06)
 
-**M0–M4 are built, typecheck clean, and verified** — 14 tests pass (5 SDK unit + 9 API
-integration against live Postgres + MinIO), plus an end-to-end smoke (real SDK →
-HTTP → DB) and a live dashboard render. The demoable MVP is complete.
+**M0–M7 are built, typecheck clean, and verified** — 28 tests pass (5 SDK core + 5
+adapter + 6 replay-unit + 12 API integration against live Postgres + MinIO), plus
+an end-to-end smoke (real SDK → HTTP → DB), a live replay UI round-trip
+(browser → Next proxy → API), and a `next build`. **Layer 4 is feature-complete
+for the MVP.**
+
+M5–M7, what shipped:
+- **M5 — Cost + latency dashboard.** `/analytics` page over the existing cost/latency
+  endpoints (cost-over-time bars, cost-by-model + latency-by-type tables) plus an
+  overview usage panel. Sidebar/topbar/overview shell.
+- **M6 — Auto-instrumentation.** `@romanica/sdk/vercel` (`wrapAISDK`) wraps a Vercel
+  AI SDK model once and emits `llm` spans for every `generateText`/`streamText` call
+  (handles both v1 and v2 usage shapes, incl. streamed responses). `@romanica/sdk/langchain`
+  (`romanicaTracer`) is a dependency-free LangChain callback handler that maps chains→`agent`,
+  models→`llm`, tools→`tool`, retrievers→`retrieval`, nested by run id. Both find the
+  active trace through a new `traceContext` (AsyncLocalStorage), so wrapped objects need
+  no per-call threading. Manual start/end span lifecycle (`Trace.startSpan` / `Span.finish`)
+  was added to support the callback (non-callback-scoped) model.
+- **M7 — Failure replay.** `POST /v1/traces/:id/replay` reconstructs each captured `llm`
+  span's exact request (messages + params) and re-issues it via an injectable
+  `ModelInvoker` (default: OpenAI-compatible, key from env/request), diffing fresh output
+  vs. the recording (`changed` flag) and optionally persisting the replay as its own trace
+  (`metadata.replayOf`). With no key it still returns the reconstructed plan. Dashboard
+  `ReplayPanel` on the trace-detail page calls a key-hiding Next route handler.
+
+Bug fixed along the way:
+- **Bare-string payloads were dropped on read.** Bun's PG driver already parses jsonb, so
+  `asObject` re-parsing a string value (e.g. an LLM's plain-string output) failed and fell
+  back to null. Fixed to keep the string on parse failure — LLM string outputs now
+  round-trip (regression test added). This directly matters for M7's output diff.
 
 What shipped beyond the original sketch, worth recording:
 - **Runtime is Bun**, not Node — `shared` is consumed as raw `.ts` (no build step);

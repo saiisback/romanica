@@ -1,6 +1,7 @@
 import { Trace } from "./trace.ts";
 import { Exporter, NoopExporter, type IExporter } from "./exporter.ts";
 import { httpTransport } from "./transport.ts";
+import { traceContext } from "./context.ts";
 import type { RomanicaConfig } from "./types.ts";
 
 const DEFAULT_ENDPOINT = "http://localhost:4000";
@@ -44,7 +45,9 @@ export class Romanica {
   ): Promise<T> {
     const trace = new Trace({ name, now: this.now, metadata: opts?.metadata }, this.now);
     try {
-      return await fn(trace);
+      // Expose the trace via AsyncLocalStorage so auto-instrumentation adapters
+      // can find it without the user threading it through every call.
+      return await traceContext.run(trace, () => fn(trace));
     } catch (err) {
       trace.markError();
       throw err;

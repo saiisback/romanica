@@ -1,11 +1,47 @@
 @import "tailwindcss";
 
+@theme {
+  --color-bg: #000000;
+  --color-panel: #0a0a0a;
+  --color-panel-2: #111111;
+  --color-line: rgba(255, 255, 255, 0.09);
+  --color-line-strong: rgba(255, 255, 255, 0.16);
+  --color-ink: #ededed;
+  --color-ink-2: #a1a1a1;
+  --color-ink-3: #6e6e6e;
+  --color-brand: #0070f3;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Geist Mono", "JetBrains Mono", Menlo,
+    monospace;
+}
+
 :root {
   color-scheme: dark;
 }
 
 html,
 body {
-  background-color: #09090b; /* zinc-950 */
-  color: #fafafa;
+  background-color: #000000;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* thin, Vercel-like scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
 }

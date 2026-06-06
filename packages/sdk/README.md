@@ -50,6 +50,40 @@ await romanica.trace("handle-ticket", async (trace) => {
 Call `await romanica.flush()` before a short-lived process exits, or
 `await romanica.shutdown()` on graceful shutdown.
 
+## Auto-instrumentation
+
+Skip the manual `trace.span(...)` calls — wrap your model/runnable once and
+spans appear automatically inside any `romanica.trace(...)`.
+
+**Vercel AI SDK** (`@romanica/sdk/vercel`):
+
+```ts
+import { wrapAISDK } from "@romanica/sdk/vercel";
+
+const model = wrapAISDK(openai("gpt-4o")); // wrap once
+await romanica.trace("run", async () => {
+  await generateText({ model, prompt: "hi" }); // llm span emitted automatically
+});
+```
+
+Works with `generateText`, `streamText`, `generateObject`, … and with both the
+v1 (`promptTokens`/`completionTokens`) and v2 (`inputTokens`/`outputTokens`)
+usage shapes. No active trace → the call passes straight through.
+
+**LangChain.js** (`@romanica/sdk/langchain`):
+
+```ts
+import { romanicaTracer } from "@romanica/sdk/langchain";
+
+await romanica.trace("run", async () => {
+  await chain.invoke(input, { callbacks: [romanicaTracer()] });
+});
+```
+
+Chains → `agent` spans, models → `llm`, tools → `tool`, retrievers →
+`retrieval`, nested via LangChain's own run ids. Pass a trace explicitly with
+`romanicaTracer(trace)` to bind to a specific run.
+
 ## Span helpers
 
 `setInput` · `setOutput` · `setAttribute(s)` · `setStatus` · `setError` ·

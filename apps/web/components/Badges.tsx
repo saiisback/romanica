@@ -6,6 +6,12 @@ const STATUS_STYLES: Record<string, string> = {
   running: "bg-amber-500/15 text-amber-400 ring-amber-500/30",
 };
 
+const DOT_STYLES: Record<string, string> = {
+  ok: "bg-emerald-400",
+  error: "bg-red-400",
+  running: "bg-amber-400 animate-pulse",
+};
+
 export function StatusBadge({ status }: { status: TraceStatus | SpanStatus }) {
   return (
     <span
@@ -15,6 +21,17 @@ export function StatusBadge({ status }: { status: TraceStatus | SpanStatus }) {
     >
       {status}
     </span>
+  );
+}
+
+export function StatusDot({ status }: { status: TraceStatus | SpanStatus }) {
+  return (
+    <span
+      className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+        DOT_STYLES[status] ?? DOT_STYLES.ok
+      }`}
+      title={status}
+    />
   );
 }
 

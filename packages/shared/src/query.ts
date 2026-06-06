@@ -86,3 +86,39 @@ export interface LatencyAnalytics {
   traceP99Ms: number;
   byType: LatencyByType[];
 }
+
+// --- failure replay ---
+
+export interface ReplayMessage {
+  role: string;
+  content: string;
+}
+
+/** Per-llm-step result of replaying a captured run. */
+export interface ReplayStep {
+  spanId: string;
+  name: string;
+  model: string | null;
+  /** ok = re-issued; skipped = no provider/no request; error = call failed */
+  status: "ok" | "skipped" | "error";
+  reason?: string;
+  /** the exact request we reconstructed from the captured span */
+  request: { messages: ReplayMessage[]; params: Record<string, unknown> };
+  originalOutput: unknown;
+  replayedOutput?: string;
+  /** did the model's output differ from the recorded run? */
+  changed?: boolean;
+  replayTokens?: number;
+  replayCostUsd?: number;
+  latencyMs?: number;
+}
+
+export interface ReplayResult {
+  traceId: string;
+  /** ok = all steps re-issued; partial = some skipped/errored; skipped = none ran */
+  status: "ok" | "partial" | "skipped" | "error";
+  steps: ReplayStep[];
+  /** id of the new trace persisted from this replay, if any */
+  replayTraceId?: string;
+  message?: string;
+}

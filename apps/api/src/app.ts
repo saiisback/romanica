@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { bearer, resolveProject } from "./auth.ts";
 import { ingestRoutes } from "./routes/ingest.ts";
 import { queryRoutes } from "./routes/query.ts";
+import { replayRoutes } from "./routes/replay.ts";
 import type { Env } from "./http.ts";
 
 export function createApp() {
@@ -22,6 +23,7 @@ export function createApp() {
 
   app.route("/", ingestRoutes);
   app.route("/", queryRoutes);
+  app.route("/", replayRoutes);
 
   // never leak stack traces; observability backend must stay up
   app.onError((err, c) => {

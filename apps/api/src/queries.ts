@@ -19,10 +19,13 @@ const isoOrNull = (v: unknown): string | null => (v == null ? null : iso(v));
 function asObject<T>(v: unknown, fallback: T): T {
   if (v == null) return fallback;
   if (typeof v === "string") {
+    // Bun's PG driver already parses jsonb, so a string here is usually the
+    // actual value (e.g. an LLM's bare-string output). Only treat it as encoded
+    // JSON if it parses; otherwise keep the string rather than dropping it.
     try {
       return JSON.parse(v) as T;
     } catch {
-      return fallback;
+      return v as T;
     }
   }
   return v as T;

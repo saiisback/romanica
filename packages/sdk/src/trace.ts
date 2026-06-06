@@ -62,6 +62,29 @@ export class Trace {
     }
   }
 
+  /**
+   * Manually open a span (start/end style) — for auto-instrumentation adapters
+   * that observe separate "start" and "end" events (e.g. LangChain callbacks)
+   * and so cannot use the callback-scoped {@link span}. The caller owns the
+   * lifecycle: call `span.finish()` (and `span.setError(...)` on failure).
+   *
+   * When `parentSpanId` is omitted it auto-nests under the active span (if any);
+   * pass an explicit id (or `null` for a root span) to control nesting yourself.
+   */
+  startSpan(
+    type: SpanType,
+    name: string,
+    opts?: { parentSpanId?: string | null },
+  ): Span {
+    const parentSpanId =
+      opts && "parentSpanId" in opts
+        ? (opts.parentSpanId ?? null)
+        : (currentSpan()?.spanId ?? null);
+    const span = new Span(this, { type, name, parentSpanId, now: this.now });
+    this.spans.push(span);
+    return span;
+  }
+
   /** @internal */
   end(): void {
     if (this.ended) return;

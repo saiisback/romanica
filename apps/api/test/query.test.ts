@@ -1,6 +1,6 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { randomUUID } from "node:crypto";
-import type { CostAnalytics, LatencyAnalytics, Page, TraceDetail, TraceSummary } from "@romanica/shared";
+import type { CostAnalytics, LatencyAnalytics, Page, ReplayResult, TraceDetail, TraceSummary } from "@romanica/shared";
 import { createApp } from "../src/app.ts";
 import { sql } from "../src/db.ts";
 
@@ -107,6 +107,77 @@ test("GET /v1/analytics/cost aggregates tokens + cost", async () => {
   expect(cost.totalCostUsd).toBeGreaterThan(0);
   const gpt4o = cost.byModel.find((m) => m.model === "gpt-4o");
   expect(gpt4o).toBeTruthy();
+});
+
+test("GET /v1/traces/:id round-trips bare-string input/output", async () => {
+  // LLM spans often carry plain-string input/output; these must not be dropped.
+  const id = randomUUID();
+  const span = randomUUID();
+  const t0 = Date.now();
+  const seed = await app.request("/v1/traces", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${KEY}` },
+    body: JSON.stringify({
+      traces: [
+        {
+          traceId: id,
+          name: "str-run",
+          status: "ok",
+          startTime: t0,
+          endTime: t0 + 10,
+          metadata: {},
+          spans: [
+            {
+              spanId: span,
+              parentSpanId: null,
+              type: "llm",
+              name: "draft",
+              status: "ok",
+              startTime: t0,
+              endTime: t0 + 10,
+              input: "say hi",
+              output: "hello there",
+              attributes: { model: "gpt-4o" },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+  expect(seed.status).toBe(200);
+
+  const res = await authed(`/v1/traces/${id}`);
+  const detail = (await res.json()) as TraceDetail;
+  expect(detail.spans[0]!.input).toBe("say hi");
+  expect(detail.spans[0]!.output).toBe("hello there");
+
+  await sql`DELETE FROM traces WHERE trace_id = ${id}`;
+});
+
+test("POST /v1/traces/:id/replay reconstructs the captured LLM calls", async () => {
+  const res = await app.request(`/v1/traces/${traceId}/replay`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${KEY}` },
+    // persist:false keeps the test from minting an extra trace; no key in CI -> skipped
+    body: JSON.stringify({ persist: false }),
+  });
+  expect(res.status).toBe(200);
+  const replay = (await res.json()) as ReplayResult;
+  expect(replay.traceId).toBe(traceId);
+  expect(replay.steps).toHaveLength(1); // the single llm span
+  const step = replay.steps[0]!;
+  expect(step.model).toBe("gpt-4o");
+  // the exact request we'd re-issue is always reconstructed, key or not
+  expect(step.request.messages).toEqual([{ role: "user", content: "hi" }]);
+});
+
+test("POST /v1/traces/:id/replay 404s for unknown id", async () => {
+  const res = await app.request(`/v1/traces/${randomUUID()}/replay`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${KEY}` },
+    body: "{}",
+  });
+  expect(res.status).toBe(404);
 });
 
 test("GET /v1/analytics/latency returns percentiles", async () => {
