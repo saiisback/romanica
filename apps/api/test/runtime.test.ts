@@ -4,6 +4,7 @@ import type {
   AgentRunSummary,
   AuditEventSummary,
   Page,
+  RuntimeAttemptSummary,
 } from "@romanica/shared";
 import { createApp } from "../src/app.ts";
 import { sql } from "../src/db.ts";
@@ -13,6 +14,15 @@ const KEY = "rom_dev_key";
 const name = `refund-agent-${crypto.randomUUID()}`;
 let agentId = "";
 let runId = "";
+let httpAgentId = "";
+let httpRunId = "";
+const agentServer = Bun.serve({
+  port: 0,
+  async fetch(req) {
+    const body = await req.json().catch(() => ({}));
+    return Response.json({ ok: true, echo: body });
+  },
+});
 
 function authed(path: string, init?: RequestInit) {
   return app.request(path, {
@@ -26,7 +36,18 @@ function authed(path: string, init?: RequestInit) {
 }
 
 afterAll(async () => {
+  agentServer.stop(true);
+  if (httpRunId) {
+    await sql`DELETE FROM audit_events WHERE target_id = ${httpRunId}`;
+    await sql`DELETE FROM runtime_attempts WHERE run_id = ${httpRunId}`;
+    await sql`DELETE FROM agent_runs WHERE id = ${httpRunId}`;
+  }
+  if (httpAgentId) {
+    await sql`DELETE FROM audit_events WHERE target_id = ${httpAgentId}`;
+    await sql`DELETE FROM agent_definitions WHERE id = ${httpAgentId}`;
+  }
   if (runId) await sql`DELETE FROM audit_events WHERE target_id = ${runId}`;
+  if (runId) await sql`DELETE FROM runtime_attempts WHERE run_id = ${runId}`;
   if (agentId) await sql`DELETE FROM audit_events WHERE target_id = ${agentId}`;
   if (runId) await sql`DELETE FROM agent_runs WHERE id = ${runId}`;
   if (agentId) await sql`DELETE FROM agent_definitions WHERE id = ${agentId}`;
@@ -86,6 +107,39 @@ test("GET /v1/runs lists runtime run requests", async () => {
   expect(res.status).toBe(200);
   const page = (await res.json()) as Page<AgentRunSummary>;
   expect(page.items.some((run) => run.id === runId)).toBe(true);
+});
+
+test("POST /v1/runs/:id/execute runs an HTTP agent and records an attempt", async () => {
+  const agentRes = await authed("/v1/agents", {
+    method: "POST",
+    body: JSON.stringify({
+      name: `http-agent-${crypto.randomUUID()}`,
+      version: "v1",
+      runtime: "http",
+      entrypoint: agentServer.url.toString(),
+    }),
+  });
+  expect(agentRes.status).toBe(201);
+  const agent = (await agentRes.json()) as AgentDefinitionSummary;
+  httpAgentId = agent.id;
+
+  const runRes = await authed("/v1/runs", {
+    method: "POST",
+    body: JSON.stringify({ agentId: httpAgentId, input: { ticket: "T-2" } }),
+  });
+  expect(runRes.status).toBe(201);
+  const run = (await runRes.json()) as AgentRunSummary;
+  httpRunId = run.id;
+
+  const executed = await authed(`/v1/runs/${httpRunId}/execute`, {
+    method: "POST",
+    body: JSON.stringify({ timeoutMs: 1000 }),
+  });
+  expect(executed.status).toBe(200);
+  const result = (await executed.json()) as { run: AgentRunSummary; attempt: RuntimeAttemptSummary };
+  expect(result.run.status).toBe("succeeded");
+  expect(result.attempt.status).toBe("succeeded");
+  expect(result.attempt.response).toMatchObject({ ok: true });
 });
 
 test("runtime changes are audited", async () => {

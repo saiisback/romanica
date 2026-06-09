@@ -14,6 +14,7 @@ const KEY = "rom_dev_key";
 const name = `support-flow-${crypto.randomUUID()}`;
 let workflowId = "";
 let workflowRunId = "";
+const workflowRunIds: string[] = [];
 
 function authed(path: string, init?: RequestInit) {
   return app.request(path, {
@@ -27,9 +28,9 @@ function authed(path: string, init?: RequestInit) {
 }
 
 afterAll(async () => {
-  if (workflowRunId) {
-    await sql`DELETE FROM audit_events WHERE target_id = ${workflowRunId}`;
-    await sql`DELETE FROM workflow_runs WHERE id = ${workflowRunId}`;
+  for (const id of workflowRunIds) {
+    await sql`DELETE FROM audit_events WHERE target_id = ${id}`;
+    await sql`DELETE FROM workflow_runs WHERE id = ${id}`;
   }
   if (workflowId) {
     await sql`DELETE FROM audit_events WHERE target_id = ${workflowId}`;
@@ -81,6 +82,15 @@ test("GET /v1/workflows/:id returns workflow detail", async () => {
   expect(definition.nodes[0]).toMatchObject({ id: "triage", type: "agent" });
 });
 
+test("POST /v1/workflows/:id/compile uses the Rust workflow compiler", async () => {
+  const res = await authed(`/v1/workflows/${workflowId}/compile`, { method: "POST", body: "{}" });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { plan: { nodeCount: number; edgeCount: number; stages: Array<{ index: number; nodeIds: string[] }> } };
+  expect(body.plan.nodeCount).toBe(2);
+  expect(body.plan.edgeCount).toBe(1);
+  expect(body.plan.stages[0]!.nodeIds).toEqual(["triage"]);
+});
+
 test("workflow upserts are audited", async () => {
   const res = await authed("/v1/audit/events?action=workflow.upsert&limit=10");
   expect(res.status).toBe(200);
@@ -101,6 +111,7 @@ test("workflow runs can be queued, listed, and completed", async () => {
   expect(queued.status).toBe(201);
   const run = (await queued.json()) as WorkflowRunSummary;
   workflowRunId = run.id;
+  workflowRunIds.push(run.id);
   expect(run.status).toBe("queued");
   expect(run.workflowName).toBe(name);
 
@@ -121,4 +132,36 @@ test("workflow runs can be queued, listed, and completed", async () => {
   expect(listed.status).toBe(200);
   const page = (await listed.json()) as Page<WorkflowRunSummary>;
   expect(page.items.some((item) => item.id === workflowRunId)).toBe(true);
+});
+
+test("workflow runs dispatch through the Rust compiler and complete", async () => {
+  const queued = await authed("/v1/workflow-runs", {
+    method: "POST",
+    body: JSON.stringify({
+      workflowId,
+      input: { ticketId: "T-2" },
+    }),
+  });
+  expect(queued.status).toBe(201);
+  const run = (await queued.json()) as WorkflowRunSummary;
+  workflowRunId = run.id;
+  workflowRunIds.push(run.id);
+
+  const dispatched = await authed(`/v1/workflow-runs/${workflowRunId}/dispatch`, {
+    method: "POST",
+    body: "{}",
+  });
+  expect(dispatched.status).toBe(200);
+  const running = (await dispatched.json()) as WorkflowRunSummary;
+  expect(running.status).toBe("running");
+  expect(running.plan).toMatchObject({ nodeCount: 2, edgeCount: 1 });
+
+  const completed = await authed(`/v1/workflow-runs/${workflowRunId}/complete`, {
+    method: "POST",
+    body: "{}",
+  });
+  expect(completed.status).toBe(200);
+  const done = (await completed.json()) as WorkflowRunSummary;
+  expect(done.status).toBe("succeeded");
+  expect(done.finishedAt).toBeTruthy();
 });

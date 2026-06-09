@@ -1,12 +1,14 @@
 import {
   createAgentDefinitionSchema,
   createAgentRunSchema,
+  executeAgentRunSchema,
   updateAgentRunSchema,
 } from "@romanica/shared";
 import { Hono } from "hono";
 import { recordAuditEvent } from "../audit.ts";
 import {
   createAgentRun,
+  executeAgentRun,
   listAgentDefinitions,
   listAgentRuns,
   updateAgentRun,
@@ -104,4 +106,29 @@ runtimeRoutes.post("/v1/runs/:id/status", async (c) => {
     },
   });
   return c.json(run);
+});
+
+runtimeRoutes.post("/v1/runs/:id/execute", async (c) => {
+  const project = c.get("project");
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = executeAgentRunSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation_failed", issues: parsed.error.issues }, 400);
+  }
+
+  const result = await executeAgentRun(project.id, c.req.param("id"), parsed.data);
+  if (!result) return c.json({ error: "not_found" }, 404);
+  await recordAuditEvent({
+    projectId: project.id,
+    action: "run.execute",
+    targetType: "agent_run",
+    targetId: result.run.id,
+    metadata: {
+      agentId: result.run.agentId,
+      status: result.run.status,
+      attempt: result.attempt.attempt,
+      executor: result.attempt.executor,
+    },
+  });
+  return c.json(result);
 });

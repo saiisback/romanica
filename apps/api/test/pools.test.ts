@@ -1,5 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
-import type { AuditEventSummary, Page, WorkerPoolSummary } from "@romanica/shared";
+import type {
+  AuditEventSummary,
+  AutoscalingDecisionSummary,
+  Page,
+  WorkerPoolSummary,
+} from "@romanica/shared";
 import { createApp } from "../src/app.ts";
 import { sql } from "../src/db.ts";
 
@@ -22,6 +27,7 @@ function authed(path: string, init?: RequestInit) {
 afterAll(async () => {
   if (poolId) {
     await sql`DELETE FROM audit_events WHERE target_id = ${poolId}`;
+    await sql`DELETE FROM autoscaling_decisions WHERE pool_id = ${poolId}`;
     await sql`DELETE FROM worker_pools WHERE id = ${poolId}`;
   }
 });
@@ -55,6 +61,21 @@ test("GET /v1/pools lists pool snapshots", async () => {
   expect(res.status).toBe(200);
   const page = (await res.json()) as Page<WorkerPoolSummary>;
   expect(page.items.some((pool) => pool.id === poolId)).toBe(true);
+});
+
+test("POST /v1/pools/:id/autoscale applies and records a scaling decision", async () => {
+  const res = await authed(`/v1/pools/${poolId}/autoscale`, { method: "POST", body: "{}" });
+  expect(res.status).toBe(200);
+  const decision = (await res.json()) as AutoscalingDecisionSummary;
+  expect(decision.poolId).toBe(poolId);
+  expect(decision.previousDesiredWorkers).toBe(4);
+  expect(decision.appliedWorkers).toBe(3);
+  expect(decision.action).toBe("scale_down");
+
+  const listed = await authed("/v1/autoscaling/decisions?limit=10");
+  expect(listed.status).toBe(200);
+  const page = (await listed.json()) as Page<AutoscalingDecisionSummary>;
+  expect(page.items.some((item) => item.id === decision.id)).toBe(true);
 });
 
 test("pool upserts are audited", async () => {

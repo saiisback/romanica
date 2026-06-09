@@ -120,10 +120,10 @@ export function Sidebar() {
         <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-3">
           <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
             <CheckCircleIcon className="h-3.5 w-3.5" />
-            Layer 4 · Active
+            Platform · Active
           </div>
           <p className="mt-1 text-[11px] leading-snug text-ink-2">
-            AgentOps is live, with runtime seeds, workflows, memory, pools, approvals, and audit.
+            Runtime, workflows, memory, routing, scaling, governance, evals, approvals, and audit are live.
           </p>
         </div>
       </div>

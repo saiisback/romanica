@@ -7,11 +7,9 @@ around model APIs — the runtime and operations layer that treats agents as wha
 actually are: **long-running, distributed cognitive workers**, not chat sessions.
 
 The full platform is a 10-layer system (runtime, orchestration, memory, observability,
-routing, scaling, comms, security, evaluation, human-in-loop). We build **one layer at a
-time**, and only move to the next when the current one has real, depending users.
-
-**The active layer today is Layer 4 — AgentOps & Observability.** It is built and working.
-Everything else is specced as roadmap but deliberately not built yet.
+routing, scaling, comms, security, evaluation, human-in-loop). Layer 4 remains the
+production center, and the repo now includes local API/dashboard implementations across
+all ten layers.
 
 - 📐 Vision / PRD: [`docs/romanica.md`](./docs/romanica.md)
 - 🗺️ Full 10-layer build doc: [`docs/BUILD.md`](./docs/BUILD.md)
@@ -45,21 +43,20 @@ memory, coordination, tracing. Romanica aims to be the operating system for thos
 
 ## The 10 layers
 
-We describe all ten so the vision is legible, but only the 🟢 layer gets built. Each other
-layer has a concrete **activation trigger** — it doesn't start until that condition is met.
+The layers below show the product map and the current local implementation status.
 
 | # | Layer | What it does | Status |
 |---|-------|--------------|--------|
-| 1 | **Agent Runtime** | Run agents as isolated, persistent, long-running workers (sandbox, pause/resume, scheduling, recovery). | 📋 Roadmap |
-| 2 | **Workflow Orchestration** | DAG workflows, multi-agent coordination, human-in-loop nodes, retries, fallbacks, versioning. | 📋 Roadmap |
-| 3 | **State & Memory** | Agent state as distributed cognition: episodic/semantic/temporal memory, checkpointing, lineage, aging. | 📋 Roadmap |
+| 1 | **Agent Runtime** | Run agents as isolated, persistent, long-running workers (sandbox, pause/resume, scheduling, recovery). | 🟢 HTTP execution attempts |
+| 2 | **Workflow Orchestration** | DAG workflows, multi-agent coordination, human-in-loop nodes, retries, fallbacks, versioning. | 🟢 Rust compile + dispatch |
+| 3 | **State & Memory** | Agent state as distributed cognition: episodic/semantic/temporal memory, checkpointing, lineage, aging. | 🟢 Store + ranked retrieval |
 | 4 | **AgentOps & Observability** | Trace every agent run as a step tree; replay failures; see token cost & latency. | 🟢 **Active — built** |
-| 5 | **Dynamic Model Routing** | Pick the best model per task by cost / latency / reliability. Fed by L4 trace data. | 📋 Roadmap |
-| 6 | **Scaling Infrastructure** | Horizontal/vertical autoscaling, GPU scheduling, queue-aware scaling, regional distribution. | 📋 Roadmap |
-| 7 | **Agent Communication** | Event bus, inter-agent messaging, task delegation, shared channels, consensus. | 📋 Roadmap |
-| 8 | **Security & Governance** | IAM for agents, policy engine, immutable audit logs, secrets, compliance. | 📋 Roadmap |
-| 9 | **Evaluation Infra** | Turn L4 traces into regression tests; benchmarks, synthetic testing, reliability scoring. | 📋 Roadmap |
-| 10 | **Human Collaboration** | Approval checkpoints, live intervention, co-pilot workflows, escalation, editable reasoning. | 📋 Roadmap |
+| 5 | **Dynamic Model Routing** | Pick the best model per task by cost / latency / reliability. Fed by L4 trace data. | 🟢 Runtime selector |
+| 6 | **Scaling Infrastructure** | Horizontal/vertical autoscaling, GPU scheduling, queue-aware scaling, regional distribution. | 🟢 Applied decisions |
+| 7 | **Agent Communication** | Event bus, inter-agent messaging, task delegation, shared channels, consensus. | 🟢 Message bus |
+| 8 | **Security & Governance** | IAM for agents, policy engine, immutable audit logs, secrets, compliance. | 🟢 Scopes + policy |
+| 9 | **Evaluation Infra** | Turn L4 traces into regression tests; benchmarks, synthetic testing, reliability scoring. | 🟢 Trace-derived evals |
+| 10 | **Human Collaboration** | Approval checkpoints, live intervention, co-pilot workflows, escalation, editable reasoning. | 🟢 Approvals |
 
 ### Why start at Layer 4
 
@@ -164,6 +161,7 @@ Project  ──►  Trace (one full agent run)  ──►  Span (one step; nests
 | `POST` | `/v1/runs` | queue an agent run request |
 | `GET`  | `/v1/runs` | list agent run requests |
 | `POST` | `/v1/runs/:id/status` | update run lifecycle status |
+| `POST` | `/v1/runs/:id/execute` | execute an HTTP agent and persist the runtime attempt |
 | `GET`  | `/v1/routing/models` | observed model candidates for trace-fed routing policies |
 | `POST` | `/v1/routing/select` | choose a model at call time from observed health/cost/latency |
 | `GET`  | `/v1/evaluations/summary` | trace-derived failure signals and exportable LLM cases |
@@ -173,15 +171,20 @@ Project  ──►  Trace (one full agent run)  ──►  Span (one step; nests
 | `POST` | `/v1/workflows` | create/update a workflow definition |
 | `GET`  | `/v1/workflows` | list workflow definitions |
 | `GET`  | `/v1/workflows/:id` | get workflow definition detail |
+| `POST` | `/v1/workflows/:id/compile` | compile a workflow through the Rust DAG compiler |
 | `POST` | `/v1/workflow-runs` | queue a workflow execution record |
 | `GET`  | `/v1/workflow-runs` | list workflow execution records |
 | `POST` | `/v1/workflow-runs/:id/status` | update workflow execution lifecycle |
+| `POST` | `/v1/workflow-runs/:id/dispatch` | compile and start a workflow run |
+| `POST` | `/v1/workflow-runs/:id/complete` | complete a dispatched workflow run |
 | `POST` | `/v1/memories` | create/update a project-scoped memory record |
 | `GET`  | `/v1/memories` | list active memories by kind/scope |
 | `GET`  | `/v1/memories/search` | ranked memory retrieval for agent context |
 | `GET`  | `/v1/memories/:id` | get memory detail |
 | `POST` | `/v1/pools` | create/update a worker pool capacity snapshot |
 | `GET`  | `/v1/pools` | list worker pool capacity and pressure |
+| `POST` | `/v1/pools/:id/autoscale` | apply the current autoscaling recommendation |
+| `GET`  | `/v1/autoscaling/decisions` | list applied autoscaler decisions |
 | `POST` | `/v1/approvals` | create a human approval checkpoint |
 | `GET`  | `/v1/approvals` | list approval checkpoints |
 | `POST` | `/v1/approvals/:id/decision` | approve/reject/cancel a checkpoint |

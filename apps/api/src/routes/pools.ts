@@ -1,7 +1,12 @@
 import { upsertWorkerPoolSchema } from "@romanica/shared";
 import { Hono } from "hono";
 import { recordAuditEvent } from "../audit.ts";
-import { listWorkerPools, upsertWorkerPool } from "../pools.ts";
+import {
+  applyAutoscalingDecision,
+  listAutoscalingDecisions,
+  listWorkerPools,
+  upsertWorkerPool,
+} from "../pools.ts";
 import type { Env } from "../http.ts";
 
 export const poolRoutes = new Hono<Env>();
@@ -50,4 +55,31 @@ poolRoutes.get("/v1/pools", async (c) => {
       limit,
     }),
   );
+});
+
+// POST /v1/pools/:id/autoscale — apply the current scaling recommendation.
+poolRoutes.post("/v1/pools/:id/autoscale", async (c) => {
+  const project = c.get("project");
+  const decision = await applyAutoscalingDecision(project.id, c.req.param("id"));
+  if (!decision) return c.json({ error: "not_found" }, 404);
+  await recordAuditEvent({
+    projectId: project.id,
+    action: "autoscaling.apply",
+    targetType: "worker_pool",
+    targetId: decision.poolId,
+    metadata: {
+      poolName: decision.poolName,
+      previousDesiredWorkers: decision.previousDesiredWorkers,
+      appliedWorkers: decision.appliedWorkers,
+      action: decision.action,
+    },
+  });
+  return c.json(decision);
+});
+
+// GET /v1/autoscaling/decisions — list applied autoscaler decisions.
+poolRoutes.get("/v1/autoscaling/decisions", async (c) => {
+  const project = c.get("project");
+  const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 50) || 50));
+  return c.json(await listAutoscalingDecisions(project.id, { limit }));
 });

@@ -98,6 +98,32 @@ export async function createWorkflowRun(
   return getWorkflowRun(projectId, rows[0].id);
 }
 
+export async function compileWorkflow(projectId: string, workflowId: string): Promise<unknown | null> {
+  const workflow = await getWorkflow(projectId, workflowId);
+  if (!workflow) return null;
+  return compileWorkflowDefinition(workflow.definition);
+}
+
+export async function dispatchWorkflowRun(
+  projectId: string,
+  id: string,
+): Promise<WorkflowRunSummary | null> {
+  const run = await getWorkflowRun(projectId, id);
+  if (!run) return null;
+  const plan = await compileWorkflow(projectId, run.workflowId);
+  if (!plan) return null;
+  return updateWorkflowRun(projectId, id, { status: "running", plan });
+}
+
+export async function completeWorkflowRun(
+  projectId: string,
+  id: string,
+): Promise<WorkflowRunSummary | null> {
+  const run = await getWorkflowRun(projectId, id);
+  if (!run) return null;
+  return updateWorkflowRun(projectId, id, { status: "succeeded", plan: run.plan });
+}
+
 export async function updateWorkflowRun(
   projectId: string,
   id: string,
@@ -121,6 +147,26 @@ export async function updateWorkflowRun(
   `) as any[];
   if (!rows[0]) return null;
   return getWorkflowRun(projectId, rows[0].id);
+}
+
+async function compileWorkflowDefinition(definition: unknown): Promise<unknown> {
+  const proc = Bun.spawn(["cargo", "run", "-q", "-p", "romanica-agent-compiler"], {
+    cwd: process.cwd(),
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  proc.stdin.write(JSON.stringify(definition));
+  proc.stdin.end();
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(stderr.trim() || "workflow compilation failed");
+  }
+  return JSON.parse(stdout);
 }
 
 export async function listWorkflowRuns(
