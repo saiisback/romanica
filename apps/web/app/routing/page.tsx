@@ -1,5 +1,5 @@
-import type { ModelRoutingAnalytics } from "@romanica/shared";
-import { getModelRouting } from "../../lib/api.ts";
+import type { ModelRoutingAnalytics, ModelSelection } from "@romanica/shared";
+import { getModelRouting, selectModel } from "../../lib/api.ts";
 import { fmtCost, fmtDuration, fmtTokens } from "../../lib/format.ts";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,13 @@ export default async function RoutingPage() {
   ).toISOString()}`;
 
   let routing: ModelRoutingAnalytics | null = null;
+  let selection: ModelSelection | null = null;
   let error: string | null = null;
   try {
-    routing = await getModelRouting(window);
+    [routing, selection] = await Promise.all([
+      getModelRouting(window),
+      selectModel({ task: "support_reply", requireHealthy: true }, window),
+    ]);
   } catch (e) {
     error = e instanceof Error ? e.message : "failed to load";
   }
@@ -36,8 +40,22 @@ export default async function RoutingPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Stat label="Candidates" value={String(routing.candidates.length)} />
         <Stat label="Preferred model" value={best?.model ?? "—"} mono />
-        <Stat label="Best score" value={best ? best.score.toFixed(4) : "—"} />
+        <Stat label="Selected now" value={selection?.selectedModel ?? "—"} mono />
       </div>
+
+      {selection && (
+        <section className="rounded-xl border border-line bg-panel px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-ink">Runtime selection</div>
+              <div className="mt-1 text-xs text-ink-3">{selection.reason}</div>
+            </div>
+            <div className="rounded border border-line bg-panel-2 px-2.5 py-1 font-mono text-xs text-ink">
+              {selection.selectedModel}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="rounded-xl border border-line bg-panel">
         <div className="border-b border-line px-4 py-3 text-sm font-medium">

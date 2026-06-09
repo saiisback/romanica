@@ -46,6 +46,8 @@ test("POST /v1/pools upserts worker pool capacity", async () => {
   expect(pool.name).toBe(name);
   expect(pool.utilization).toBe(1);
   expect(pool.pressure).toBe("saturated");
+  expect(pool.recommendedWorkers).toBe(3);
+  expect(pool.scaleAction).toBe("scale_down");
 });
 
 test("GET /v1/pools lists pool snapshots", async () => {

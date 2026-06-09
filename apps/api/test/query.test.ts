@@ -5,8 +5,10 @@ import type {
   CostAnalytics,
   EvaluationAnalytics,
   LatencyAnalytics,
+  ModelSelection,
   ModelRoutingAnalytics,
   Page,
+  PolicyDecision,
   ReplayResult,
   TraceDetail,
   TraceSummary,
@@ -24,8 +26,15 @@ const llmSpan = randomUUID();
 const errorSpan = randomUUID();
 const now = Date.now() - 10_000;
 
-function authed(path: string) {
-  return app.request(path, { headers: { authorization: `Bearer ${KEY}` } });
+function authed(path: string, init?: RequestInit) {
+  return app.request(path, {
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${KEY}`,
+      ...(init?.headers ?? {}),
+    },
+  });
 }
 
 beforeAll(async () => {
@@ -243,6 +252,48 @@ test("GET /v1/routing/models ranks observed model candidates", async () => {
   expect(mini).toBeTruthy();
   expect(mini!.errorRate).toBeGreaterThan(0);
   expect(mini!.recommendation).toBe("risky");
+});
+
+test("POST /v1/routing/select chooses a healthy observed model", async () => {
+  const res = await authed("/v1/routing/select", {
+    method: "POST",
+    body: JSON.stringify({
+      task: "support_reply",
+      candidates: ["gpt-4o-mini", "gpt-4o"],
+      requireHealthy: true,
+    }),
+  });
+  expect(res.status).toBe(200);
+  const selection = (await res.json()) as ModelSelection;
+  expect(selection.selectedModel).toBe("gpt-4o");
+  expect(selection.reason).toBe("lowest_scored_viable_candidate");
+  expect(selection.rejected.some((item) => item.model === "gpt-4o-mini")).toBe(true);
+});
+
+test("POST /v1/policies/evaluate reviews risky actions and denies blocked mutations", async () => {
+  const reviewRes = await authed("/v1/policies/evaluate", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "workflow.publish",
+      targetType: "workflow",
+      context: { highRisk: true },
+    }),
+  });
+  expect(reviewRes.status).toBe(200);
+  const review = (await reviewRes.json()) as PolicyDecision;
+  expect(review.decision).toBe("review");
+  expect(review.requiredApproval).toBe(true);
+
+  const denyRes = await authed("/v1/policies/evaluate", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "audit.delete",
+      targetType: "audit",
+    }),
+  });
+  expect(denyRes.status).toBe(200);
+  const deny = (await denyRes.json()) as PolicyDecision;
+  expect(deny.decision).toBe("deny");
 });
 
 test("GET /v1/evaluations/summary returns trace-derived signals and cases", async () => {

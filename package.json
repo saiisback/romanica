@@ -11,6 +11,7 @@
   },
   "scripts": {
     "typecheck": "bun run --filter '*' typecheck",
+    "rust:test": "cargo test --workspace",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:migrate": "bun run scripts/migrate.ts",

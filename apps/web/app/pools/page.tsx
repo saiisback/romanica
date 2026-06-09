@@ -47,14 +47,16 @@ export default async function PoolsPage() {
               <th className="px-4 py-2 text-right font-medium">Workers</th>
               <th className="px-4 py-2 text-right font-medium">Running</th>
               <th className="px-4 py-2 text-right font-medium">Queued</th>
+              <th className="px-4 py-2 text-right font-medium">Target</th>
               <th className="px-4 py-2 text-right font-medium">Utilization</th>
+              <th className="px-4 py-2 font-medium">Action</th>
               <th className="px-4 py-2 text-right font-medium">Updated</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {page.items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-ink-3">
+                <td colSpan={10} className="px-4 py-6 text-center text-ink-3">
                   No worker pool snapshots yet.
                 </td>
               </tr>
@@ -69,9 +71,11 @@ export default async function PoolsPage() {
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink-2">{pool.runningTasks}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink-2">{pool.queuedTasks}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-ink-2">{pool.recommendedWorkers}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink">
                     {(pool.utilization * 100).toFixed(0)}%
                   </td>
+                  <td className="px-4 py-2"><ActionBadge value={pool.scaleAction} /></td>
                   <td className="px-4 py-2 text-right text-ink-3">{fmtRelative(pool.updatedAt)}</td>
                 </tr>
               ))
@@ -100,6 +104,16 @@ function PressureBadge({ value }: { value: WorkerPoolSummary["pressure"] }) {
       : value === "healthy"
         ? "border-sky-500/25 bg-sky-500/10 text-sky-300"
         : "border-line bg-panel-2 text-ink-3";
+  return <span className={`rounded border px-2 py-0.5 text-xs font-medium ${cls}`}>{value}</span>;
+}
+
+function ActionBadge({ value }: { value: WorkerPoolSummary["scaleAction"] }) {
+  const cls =
+    value === "scale_up"
+      ? "border-red-500/25 bg-red-500/10 text-red-300"
+      : value === "scale_down"
+        ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
+        : "border-emerald-500/25 bg-emerald-500/10 text-emerald-300";
   return <span className={`rounded border px-2 py-0.5 text-xs font-medium ${cls}`}>{value}</span>;
 }
 

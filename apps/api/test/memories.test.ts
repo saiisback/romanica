@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import type { AuditEventSummary, MemorySummary, Page } from "@romanica/shared";
+import type { AuditEventSummary, MemorySearchResult, MemorySummary, Page } from "@romanica/shared";
 import { createApp } from "../src/app.ts";
 import { sql } from "../src/db.ts";
 
@@ -56,6 +56,16 @@ test("GET /v1/memories lists memories by kind and scope", async () => {
   expect(res.status).toBe(200);
   const page = (await res.json()) as Page<MemorySummary>;
   expect(page.items.some((memory) => memory.id === memoryId)).toBe(true);
+});
+
+test("GET /v1/memories/search returns ranked retrieval results", async () => {
+  const res = await authed("/v1/memories/search?q=short%20replies&kind=semantic&scope=support-agent");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { items: MemorySearchResult[] };
+  expect(body.items.length).toBeGreaterThanOrEqual(1);
+  expect(body.items[0]!.id).toBe(memoryId);
+  expect(body.items[0]!.rank).toBe(1);
+  expect(body.items[0]!.score).toBeGreaterThan(0);
 });
 
 test("GET /v1/memories/:id returns memory detail", async () => {

@@ -7,21 +7,29 @@ import type {
   CostAnalytics,
   EvaluationAnalytics,
   LatencyAnalytics,
+  ModelSelection,
   MemorySummary,
   ModelRoutingAnalytics,
   Page,
+  PolicyDecision,
   TraceDetail,
   TraceSummary,
   WorkflowSummary,
+  WorkflowRunSummary,
   WorkerPoolSummary,
 } from "@romanica/shared";
 
 const API_URL = process.env.API_URL ?? "http://localhost:4000";
 const API_KEY = process.env.ROMANICA_API_KEY ?? "rom_dev_key";
 
-async function api<T>(path: string): Promise<T> {
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { authorization: `Bearer ${API_KEY}` },
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${API_KEY}`,
+      ...(init?.headers ?? {}),
+    },
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`API ${path} -> ${res.status}`);
@@ -54,6 +62,20 @@ export function getModelRouting(query = ""): Promise<ModelRoutingAnalytics> {
   return api<ModelRoutingAnalytics>(`/v1/routing/models${query}`);
 }
 
+export function selectModel(body: Record<string, unknown>, query = ""): Promise<ModelSelection> {
+  return api<ModelSelection>(`/v1/routing/select${query}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function evaluatePolicy(body: Record<string, unknown>): Promise<PolicyDecision> {
+  return api<PolicyDecision>("/v1/policies/evaluate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function getEvaluationSummary(query = ""): Promise<EvaluationAnalytics> {
   return api<EvaluationAnalytics>(`/v1/evaluations/summary${query}`);
 }
@@ -68,6 +90,10 @@ export function getMessages(query = ""): Promise<Page<AgentMessageSummary>> {
 
 export function getWorkflows(query = ""): Promise<Page<WorkflowSummary>> {
   return api<Page<WorkflowSummary>>(`/v1/workflows${query}`);
+}
+
+export function getWorkflowRuns(query = ""): Promise<Page<WorkflowRunSummary>> {
+  return api<Page<WorkflowRunSummary>>(`/v1/workflow-runs${query}`);
 }
 
 export function getMemories(query = ""): Promise<Page<MemorySummary>> {

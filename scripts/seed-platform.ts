@@ -59,7 +59,7 @@ const run = await api<{ id: string }>("/v1/runs", {
 });
 await api(`/v1/runs/${run.id}/status`, { status: "succeeded", traceId });
 
-await api("/v1/workflows", {
+const workflow = await api<{ id: string }>("/v1/workflows", {
   name: "support-ticket-resolution",
   version: "v1",
   status: "active",
@@ -75,6 +75,22 @@ await api("/v1/workflows", {
     ],
   },
   metadata: { seeded: true },
+});
+const workflowRun = await api<{ id: string }>("/v1/workflow-runs", {
+  workflowId: workflow.id,
+  traceId,
+  input: { ticketId: "T-SEED-1" },
+});
+await api(`/v1/workflow-runs/${workflowRun.id}/status`, {
+  status: "succeeded",
+  traceId,
+  plan: {
+    stages: [
+      { index: 0, nodeIds: ["triage"] },
+      { index: 1, nodeIds: ["approval"] },
+      { index: 2, nodeIds: ["reply"] },
+    ],
+  },
 });
 
 await api("/v1/memories", {
@@ -127,6 +143,8 @@ console.log(
       traceId,
       agentId: agent.id,
       runId: run.id,
+      workflowId: workflow.id,
+      workflowRunId: workflowRun.id,
       messageId: message.id,
       approvalId: approval.id,
     },

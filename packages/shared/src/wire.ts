@@ -89,6 +89,21 @@ export const createWorkflowSchema = z.object({
 });
 export type CreateWorkflow = z.infer<typeof createWorkflowSchema>;
 
+export const createWorkflowRunSchema = z.object({
+  workflowId: z.string().uuid(),
+  input: z.unknown().default({}),
+  traceId: z.string().uuid().optional(),
+});
+export type CreateWorkflowRun = z.infer<typeof createWorkflowRunSchema>;
+
+export const updateWorkflowRunSchema = z.object({
+  status: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]),
+  traceId: z.string().uuid().optional(),
+  plan: z.unknown().optional(),
+  error: spanErrorSchema.optional(),
+});
+export type UpdateWorkflowRun = z.infer<typeof updateWorkflowRunSchema>;
+
 // --- state & memory (Layer 3 seed) ---
 
 export const memoryKindSchema = z.enum(["semantic", "episodic", "procedural", "fact"]);
@@ -105,6 +120,36 @@ export const upsertMemorySchema = z.object({
   metadata: z.record(z.unknown()).default({}),
 });
 export type UpsertMemory = z.infer<typeof upsertMemorySchema>;
+
+export const searchMemoriesSchema = z.object({
+  query: z.string().min(1).max(512),
+  scope: z.string().min(1).max(128).optional(),
+  kind: memoryKindSchema.optional(),
+  limit: z.number().int().min(1).max(50).default(10),
+});
+export type SearchMemories = z.infer<typeof searchMemoriesSchema>;
+
+// --- model routing (Layer 5 runtime) ---
+
+export const selectModelSchema = z.object({
+  task: z.string().min(1).max(128).default("general"),
+  candidates: z.array(z.string().min(1).max(128)).optional(),
+  maxCostUsd: z.number().min(0).optional(),
+  maxLatencyMs: z.number().int().min(1).optional(),
+  requireHealthy: z.boolean().default(true),
+});
+export type SelectModel = z.infer<typeof selectModelSchema>;
+
+// --- governance policy (Layer 8 runtime) ---
+
+export const evaluatePolicySchema = z.object({
+  actor: z.string().min(1).max(128).default("api_key"),
+  action: z.string().min(1).max(128),
+  targetType: z.string().min(1).max(64),
+  targetId: z.string().min(1).max(256).optional(),
+  context: z.record(z.unknown()).default({}),
+});
+export type EvaluatePolicy = z.infer<typeof evaluatePolicySchema>;
 
 // --- scaling infrastructure (Layer 6 seed) ---
 
@@ -169,3 +214,8 @@ export const updateAgentRunSchema = z.object({
   error: spanErrorSchema.optional(),
 });
 export type UpdateAgentRun = z.infer<typeof updateAgentRunSchema>;
+
+export const executeAgentRunSchema = z.object({
+  timeoutMs: z.number().int().min(100).max(30_000).default(5_000),
+});
+export type ExecuteAgentRun = z.infer<typeof executeAgentRunSchema>;

@@ -1,5 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
-import type { AuditEventSummary, Page, WorkflowDetail, WorkflowSummary } from "@romanica/shared";
+import type {
+  AuditEventSummary,
+  Page,
+  WorkflowDetail,
+  WorkflowRunSummary,
+  WorkflowSummary,
+} from "@romanica/shared";
 import { createApp } from "../src/app.ts";
 import { sql } from "../src/db.ts";
 
@@ -7,6 +13,7 @@ const app = createApp();
 const KEY = "rom_dev_key";
 const name = `support-flow-${crypto.randomUUID()}`;
 let workflowId = "";
+let workflowRunId = "";
 
 function authed(path: string, init?: RequestInit) {
   return app.request(path, {
@@ -20,6 +27,10 @@ function authed(path: string, init?: RequestInit) {
 }
 
 afterAll(async () => {
+  if (workflowRunId) {
+    await sql`DELETE FROM audit_events WHERE target_id = ${workflowRunId}`;
+    await sql`DELETE FROM workflow_runs WHERE id = ${workflowRunId}`;
+  }
   if (workflowId) {
     await sql`DELETE FROM audit_events WHERE target_id = ${workflowId}`;
     await sql`DELETE FROM workflows WHERE id = ${workflowId}`;
@@ -77,4 +88,37 @@ test("workflow upserts are audited", async () => {
   const event = page.items.find((item) => item.targetId === workflowId);
   expect(event).toBeTruthy();
   expect(event!.metadata.nodeCount).toBe(2);
+});
+
+test("workflow runs can be queued, listed, and completed", async () => {
+  const queued = await authed("/v1/workflow-runs", {
+    method: "POST",
+    body: JSON.stringify({
+      workflowId,
+      input: { ticketId: "T-1" },
+    }),
+  });
+  expect(queued.status).toBe(201);
+  const run = (await queued.json()) as WorkflowRunSummary;
+  workflowRunId = run.id;
+  expect(run.status).toBe("queued");
+  expect(run.workflowName).toBe(name);
+
+  const done = await authed(`/v1/workflow-runs/${workflowRunId}/status`, {
+    method: "POST",
+    body: JSON.stringify({
+      status: "succeeded",
+      plan: { stages: [{ index: 0, nodeIds: ["triage"] }] },
+    }),
+  });
+  expect(done.status).toBe(200);
+  const completed = (await done.json()) as WorkflowRunSummary;
+  expect(completed.status).toBe("succeeded");
+  expect(completed.finishedAt).toBeTruthy();
+  expect(completed.plan).toMatchObject({ stages: [{ index: 0 }] });
+
+  const listed = await authed("/v1/workflow-runs?status=succeeded");
+  expect(listed.status).toBe(200);
+  const page = (await listed.json()) as Page<WorkflowRunSummary>;
+  expect(page.items.some((item) => item.id === workflowRunId)).toBe(true);
 });

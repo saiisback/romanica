@@ -238,6 +238,7 @@ fn estimate_cost_usd(model: Option<&str>, prompt_tokens: u64, completion_tokens:
         + (completion_tokens as f64 / 1_000_000.0) * price.output
 }
 
+#[derive(Clone, Copy)]
 struct ModelPrice {
     input: f64,
     output: f64,
@@ -382,4 +383,3 @@ mod tests {
         assert_eq!(summary.traces[0].total_cost_usd, 0.01);
     }
 }
-

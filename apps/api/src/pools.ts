@@ -86,18 +86,32 @@ function toSummary(r: any): WorkerPoolSummary {
       : utilization <= 0.1
         ? "idle"
         : "healthy";
+  const desiredWorkers = num(r.desired_workers);
+  const requiredCapacity = runningTasks + queuedTasks;
+  const recommendedWorkers = Math.max(
+    pressure === "idle" ? 0 : 1,
+    Math.ceil(requiredCapacity / maxConcurrency),
+  );
+  const scaleAction: WorkerPoolSummary["scaleAction"] =
+    recommendedWorkers > desiredWorkers
+      ? "scale_up"
+      : recommendedWorkers < desiredWorkers
+        ? "scale_down"
+        : "hold";
   return {
     id: r.id,
     projectId: r.project_id,
     name: r.name,
     status: r.status,
-    desiredWorkers: num(r.desired_workers),
+    desiredWorkers,
     activeWorkers,
     queuedTasks,
     runningTasks,
     maxConcurrency,
     utilization,
     pressure,
+    recommendedWorkers,
+    scaleAction,
     metadata: asObject(r.metadata, {}),
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),

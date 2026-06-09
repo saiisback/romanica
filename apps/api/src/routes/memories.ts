@@ -1,7 +1,7 @@
-import { upsertMemorySchema } from "@romanica/shared";
+import { searchMemoriesSchema, upsertMemorySchema } from "@romanica/shared";
 import { Hono } from "hono";
 import { recordAuditEvent } from "../audit.ts";
-import { getMemory, listMemories, upsertMemory } from "../memories.ts";
+import { getMemory, listMemories, searchMemories, upsertMemory } from "../memories.ts";
 import type { Env } from "../http.ts";
 
 export const memoryRoutes = new Hono<Env>();
@@ -50,6 +50,36 @@ memoryRoutes.get("/v1/memories", async (c) => {
       limit,
     }),
   );
+});
+
+// GET /v1/memories/search — retrieve ranked memories for an agent context.
+memoryRoutes.get("/v1/memories/search", async (c) => {
+  const project = c.get("project");
+  const parsed = searchMemoriesSchema.safeParse({
+    query: c.req.query("q"),
+    kind: c.req.query("kind"),
+    scope: c.req.query("scope"),
+    limit: Number(c.req.query("limit") ?? 10) || 10,
+  });
+  if (!parsed.success) {
+    return c.json({ error: "validation_failed", issues: parsed.error.issues }, 400);
+  }
+
+  const results = await searchMemories(project.id, parsed.data);
+  await recordAuditEvent({
+    projectId: project.id,
+    action: "memory.search",
+    targetType: "memory",
+    targetId: null,
+    metadata: {
+      query: parsed.data.query,
+      scope: parsed.data.scope,
+      kind: parsed.data.kind,
+      results: results.items.length,
+    },
+  });
+
+  return c.json(results);
 });
 
 // GET /v1/memories/:id — memory detail.

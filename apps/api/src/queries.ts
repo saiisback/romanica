@@ -7,7 +7,9 @@ import {
   type LatencyAnalytics,
   type ModelRoutingAnalytics,
   type ModelRoutingCandidate,
+  type ModelSelection,
   type Page,
+  type SelectModel,
   type SpanNode,
   type TraceDetail,
   type TraceSummary,
@@ -329,6 +331,55 @@ export async function modelRoutingAnalytics(
   return {
     window: { from: params.from.toISOString(), to: params.to.toISOString() },
     candidates,
+  };
+}
+
+export async function selectModelForRequest(
+  projectId: string,
+  params: RangeParams & SelectModel,
+): Promise<ModelSelection> {
+  const routing = await modelRoutingAnalytics(projectId, params);
+  const allowed = new Set(params.candidates ?? routing.candidates.map((c) => c.model));
+  const rejected: ModelSelection["rejected"] = [];
+
+  const viable = routing.candidates.filter((candidate) => {
+    if (!allowed.has(candidate.model)) {
+      rejected.push({ model: candidate.model, reason: "not_requested" });
+      return false;
+    }
+    if (params.requireHealthy && candidate.recommendation === "risky") {
+      rejected.push({ model: candidate.model, reason: "risky" });
+      return false;
+    }
+    if (params.maxCostUsd != null && candidate.avgCostUsd > params.maxCostUsd) {
+      rejected.push({ model: candidate.model, reason: "over_cost_limit" });
+      return false;
+    }
+    if (params.maxLatencyMs != null && candidate.p95LatencyMs > params.maxLatencyMs) {
+      rejected.push({ model: candidate.model, reason: "over_latency_limit" });
+      return false;
+    }
+    return true;
+  });
+
+  const selected = viable[0] ?? routing.candidates.find((c) => allowed.has(c.model)) ?? null;
+  if (selected) {
+    return {
+      selectedModel: selected.model,
+      task: params.task,
+      reason: viable.length > 0 ? "lowest_scored_viable_candidate" : "fallback_no_viable_candidate",
+      candidate: selected,
+      rejected,
+    };
+  }
+
+  const fallback = params.candidates?.[0] ?? "gpt-4o-mini";
+  return {
+    selectedModel: fallback,
+    task: params.task,
+    reason: "fallback_no_observed_candidates",
+    candidate: null,
+    rejected,
   };
 }
 

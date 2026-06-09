@@ -1,5 +1,6 @@
+import { evaluatePolicySchema, selectModelSchema } from "@romanica/shared";
 import { Hono } from "hono";
-import { listAuditEvents } from "../audit.ts";
+import { listAuditEvents, recordAuditEvent } from "../audit.ts";
 import {
   costAnalytics,
   evaluationAnalytics,
@@ -7,8 +8,10 @@ import {
   latencyAnalytics,
   listTraces,
   modelRoutingAnalytics,
+  selectModelForRequest,
 } from "../queries.ts";
 import type { Env } from "../http.ts";
+import { evaluatePolicy } from "../policies.ts";
 
 export const queryRoutes = new Hono<Env>();
 
@@ -72,6 +75,69 @@ queryRoutes.get("/v1/routing/models", async (c) => {
   const project = c.get("project");
   const { from, to } = range(c);
   return c.json(await modelRoutingAnalytics(project.id, { from, to }));
+});
+
+// POST /v1/routing/select — choose a model for an outbound call.
+queryRoutes.post("/v1/routing/select", async (c) => {
+  const project = c.get("project");
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+
+  const parsed = selectModelSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation_failed", issues: parsed.error.issues }, 400);
+  }
+
+  const { from, to } = range(c);
+  const selection = await selectModelForRequest(project.id, { from, to, ...parsed.data });
+  await recordAuditEvent({
+    projectId: project.id,
+    action: "routing.select",
+    targetType: "model",
+    targetId: selection.selectedModel,
+    metadata: {
+      task: selection.task,
+      reason: selection.reason,
+      rejected: selection.rejected,
+    },
+  });
+  return c.json(selection);
+});
+
+// POST /v1/policies/evaluate — governance decision for planned platform actions.
+queryRoutes.post("/v1/policies/evaluate", async (c) => {
+  const project = c.get("project");
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+
+  const parsed = evaluatePolicySchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "validation_failed", issues: parsed.error.issues }, 400);
+  }
+
+  const decision = evaluatePolicy(parsed.data);
+  await recordAuditEvent({
+    projectId: project.id,
+    action: "policy.evaluate",
+    targetType: parsed.data.targetType,
+    targetId: parsed.data.targetId ?? null,
+    metadata: {
+      actor: parsed.data.actor,
+      requestedAction: parsed.data.action,
+      decision: decision.decision,
+      matchedRules: decision.matchedRules,
+    },
+  });
+
+  return c.json(decision);
 });
 
 // GET /v1/evaluations/summary — trace-derived evaluation signals and cases

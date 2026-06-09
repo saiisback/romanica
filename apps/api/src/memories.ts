@@ -1,4 +1,4 @@
-import type { MemorySummary, Page, UpsertMemory } from "@romanica/shared";
+import type { MemorySearchResult, MemorySummary, Page, SearchMemories, UpsertMemory } from "@romanica/shared";
 import { sql } from "./db.ts";
 
 const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : String(v));
@@ -87,6 +87,59 @@ export async function getMemory(projectId: string, id: string): Promise<MemorySu
     LIMIT 1
   `) as any[];
   return rows[0] ? toSummary(rows[0]) : null;
+}
+
+export async function searchMemories(
+  projectId: string,
+  params: SearchMemories,
+): Promise<{ items: MemorySearchResult[] }> {
+  const query = params.query.trim();
+  const needle = query.toLowerCase();
+  const kind = params.kind ?? null;
+  const scope = params.scope ?? null;
+  const rows = (await sql`
+    SELECT id, project_id, scope, kind, key, content, source_type, source_id,
+      confidence, expires_at, metadata, created_at, updated_at,
+      (
+        CASE WHEN lower(key) = lower(${query}) THEN 8 ELSE 0 END
+        + CASE WHEN lower(key) LIKE '%' || lower(${query}) || '%' THEN 4 ELSE 0 END
+        + CASE WHEN lower(content::text) LIKE '%' || lower(${query}) || '%' THEN 3 ELSE 0 END
+        + CASE WHEN lower(COALESCE(source_type, '')) LIKE '%' || lower(${query}) || '%' THEN 1 ELSE 0 END
+        + CASE WHEN lower(COALESCE(source_id, '')) LIKE '%' || lower(${query}) || '%' THEN 1 ELSE 0 END
+        + CASE WHEN lower(metadata::text) LIKE '%' || lower(${query}) || '%' THEN 1 ELSE 0 END
+      ) AS match_score
+    FROM memories
+    WHERE project_id = ${projectId}
+      AND (${kind}::text IS NULL OR kind = ${kind})
+      AND (${scope}::text IS NULL OR scope = ${scope})
+      AND (expires_at IS NULL OR expires_at > now())
+      AND (
+        lower(key) LIKE '%' || lower(${query}) || '%'
+        OR lower(content::text) LIKE '%' || lower(${query}) || '%'
+        OR lower(COALESCE(source_type, '')) LIKE '%' || lower(${query}) || '%'
+        OR lower(COALESCE(source_id, '')) LIKE '%' || lower(${query}) || '%'
+        OR lower(metadata::text) LIKE '%' || lower(${query}) || '%'
+      )
+    ORDER BY match_score DESC, confidence DESC NULLS LAST, updated_at DESC, id DESC
+    LIMIT ${params.limit * 3}
+  `) as any[];
+
+  const now = Date.now();
+  const scored = rows
+    .map((row) => {
+      const memory = toSummary(row);
+      const ageDays = Math.max(0, (now - new Date(memory.updatedAt).getTime()) / 86_400_000);
+      const freshness = 1 / (1 + ageDays / 30);
+      const confidence = memory.confidence ?? 0.5;
+      const exactBonus = memory.key.toLowerCase() === needle ? 2 : 0;
+      const score = Number((Number(row.match_score) + confidence * 2 + freshness + exactBonus).toFixed(4));
+      return { ...memory, score };
+    })
+    .sort((a, b) => b.score - a.score || b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, params.limit)
+    .map((memory, idx) => ({ ...memory, rank: idx + 1 }));
+
+  return { items: scored };
 }
 
 function toSummary(r: any): MemorySummary {

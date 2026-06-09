@@ -38,8 +38,8 @@ memory, coordination, tracing. Romanica aims to be the operating system for thos
 | **Engine** | **Rust** | The hot/heavy paths: trace-ingest core (L4), agent compiler (L2), sandboxed runtime (L1). Built incrementally, **only when a layer is active and its data proves the TS version is the bottleneck.** |
 
 > **TS is how people touch Romanica; Rust is what makes it fast.** We earn each Rust engine
-> by first proving the layer in TypeScript. Right now everything is TypeScript on Bun — no
-> Rust has been written yet, by design.
+> by first proving the layer in TypeScript. The first Rust seeds now exist under
+> `engines/`: `ingest-core` for L4 rollups and `agent-compiler` for L2 DAG planning.
 
 ---
 
@@ -165,6 +165,7 @@ Project  ──►  Trace (one full agent run)  ──►  Span (one step; nests
 | `GET`  | `/v1/runs` | list agent run requests |
 | `POST` | `/v1/runs/:id/status` | update run lifecycle status |
 | `GET`  | `/v1/routing/models` | observed model candidates for trace-fed routing policies |
+| `POST` | `/v1/routing/select` | choose a model at call time from observed health/cost/latency |
 | `GET`  | `/v1/evaluations/summary` | trace-derived failure signals and exportable LLM cases |
 | `POST` | `/v1/messages` | publish a project-scoped agent message |
 | `GET`  | `/v1/messages` | list recent agent messages by channel/status |
@@ -172,14 +173,19 @@ Project  ──►  Trace (one full agent run)  ──►  Span (one step; nests
 | `POST` | `/v1/workflows` | create/update a workflow definition |
 | `GET`  | `/v1/workflows` | list workflow definitions |
 | `GET`  | `/v1/workflows/:id` | get workflow definition detail |
+| `POST` | `/v1/workflow-runs` | queue a workflow execution record |
+| `GET`  | `/v1/workflow-runs` | list workflow execution records |
+| `POST` | `/v1/workflow-runs/:id/status` | update workflow execution lifecycle |
 | `POST` | `/v1/memories` | create/update a project-scoped memory record |
 | `GET`  | `/v1/memories` | list active memories by kind/scope |
+| `GET`  | `/v1/memories/search` | ranked memory retrieval for agent context |
 | `GET`  | `/v1/memories/:id` | get memory detail |
 | `POST` | `/v1/pools` | create/update a worker pool capacity snapshot |
 | `GET`  | `/v1/pools` | list worker pool capacity and pressure |
 | `POST` | `/v1/approvals` | create a human approval checkpoint |
 | `GET`  | `/v1/approvals` | list approval checkpoints |
 | `POST` | `/v1/approvals/:id/decision` | approve/reject/cancel a checkpoint |
+| `POST` | `/v1/policies/evaluate` | evaluate governance policy for a planned action |
 | `GET`  | `/v1/audit/events` | project audit trail for ingest and replay events |
 
 All `/v1/*` routes require a `Bearer <api-key>` that resolves to a project.
@@ -247,6 +253,7 @@ The dashboard reads `API_URL` (default `http://localhost:4000`) and `ROMANICA_AP
 |---------|------|
 | `bun run typecheck` | typecheck all workspaces |
 | `bun test` | run the SDK + API test suites |
+| `bun run rust:test` | run Rust engine tests |
 | `bun run db:up` / `db:down` | start / stop containers |
 | `bun run db:migrate` | apply pending migrations (idempotent) |
 | `bun run db:reset` | wipe volumes, recreate, re-migrate |
@@ -278,7 +285,8 @@ includes **trace-fed seeds** for both: `/routing` ranks observed models by cost,
 and error rate, while `/evaluations` turns captured traces into failure signals and
 regression-test cases. It includes an L1 control-plane seed: `/agents` and `/runs` store
 runtime definitions and run lifecycle requests without executing user code. The L2 seed
-`/workflows` stores versioned workflow definitions without executing them. The L3 state seed
+`/workflows` and `/workflow-runs` stores versioned workflow definitions plus execution
+lifecycle records. The L3 state seed
 is `/memories`, a scoped memory store that can link records back to traces, messages, or
 workflows. The L6 scaling seed is `/pools`, a worker-pool capacity and queue-pressure view.
 The L7 communication seed is `/messages` for project-scoped agent handoffs. The L10 collaboration seed is

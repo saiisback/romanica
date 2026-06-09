@@ -1,4 +1,3 @@
 [workspace]
-members = ["engines/ingest-core"]
+members = ["engines/ingest-core", "engines/agent-compiler"]
 resolver = "3"
-

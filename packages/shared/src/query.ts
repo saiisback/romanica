@@ -143,6 +143,14 @@ export interface ModelRoutingAnalytics {
   candidates: ModelRoutingCandidate[];
 }
 
+export interface ModelSelection {
+  selectedModel: string;
+  task: string;
+  reason: string;
+  candidate: ModelRoutingCandidate | null;
+  rejected: Array<{ model: string; reason: string }>;
+}
+
 // --- evaluation (Layer 9 seed) ---
 
 export interface EvaluationSignal {
@@ -188,6 +196,13 @@ export interface AuditEventSummary {
   createdAt: string;
 }
 
+export interface PolicyDecision {
+  decision: "allow" | "deny" | "review";
+  reason: string;
+  requiredApproval: boolean;
+  matchedRules: string[];
+}
+
 // --- agent communication (Layer 7 seed) ---
 
 export interface AgentMessageSummary {
@@ -222,6 +237,22 @@ export interface WorkflowDetail extends WorkflowSummary {
   definition: unknown;
 }
 
+export interface WorkflowRunSummary {
+  id: string;
+  projectId: string;
+  workflowId: string;
+  workflowName: string;
+  workflowVersion: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  input: unknown;
+  plan: unknown;
+  traceId: string | null;
+  error: SpanError | null;
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 // --- state & memory (Layer 3 seed) ---
 
 export interface MemorySummary {
@@ -240,6 +271,11 @@ export interface MemorySummary {
   updatedAt: string;
 }
 
+export interface MemorySearchResult extends MemorySummary {
+  score: number;
+  rank: number;
+}
+
 // --- scaling infrastructure (Layer 6 seed) ---
 
 export interface WorkerPoolSummary {
@@ -254,9 +290,26 @@ export interface WorkerPoolSummary {
   maxConcurrency: number;
   utilization: number;
   pressure: "idle" | "healthy" | "saturated";
+  recommendedWorkers: number;
+  scaleAction: "scale_down" | "hold" | "scale_up";
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AutoscalingDecisionSummary {
+  id: string;
+  projectId: string;
+  poolId: string;
+  poolName: string;
+  previousDesiredWorkers: number;
+  recommendedWorkers: number;
+  appliedWorkers: number | null;
+  action: "scale_down" | "hold" | "scale_up";
+  reason: string;
+  metrics: Record<string, unknown>;
+  appliedAt: string | null;
+  createdAt: string;
 }
 
 // --- human collaboration (Layer 10 seed) ---
@@ -304,5 +357,19 @@ export interface AgentRunSummary {
   error: SpanError | null;
   queuedAt: string;
   startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface RuntimeAttemptSummary {
+  id: string;
+  projectId: string;
+  runId: string;
+  attempt: number;
+  executor: string;
+  status: "started" | "succeeded" | "failed";
+  request: unknown;
+  response: unknown;
+  error: SpanError | null;
+  startedAt: string;
   finishedAt: string | null;
 }

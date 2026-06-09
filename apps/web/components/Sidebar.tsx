@@ -24,16 +24,18 @@ const NAV = [
   { href: "/analytics", label: "Analytics", icon: BarsIcon },
   { href: "/analytics#latency", label: "Latency", icon: ClockIcon },
   { href: "/workflows", label: "Workflows", icon: LayersIcon },
+  { href: "/workflow-runs", label: "Workflow Runs", icon: ActivityIcon },
   { href: "/memories", label: "Memories", icon: BoxIcon },
   { href: "/pools", label: "Pools", icon: BarsIcon },
   { href: "/routing", label: "Routing", icon: GitBranchIcon },
+  { href: "/governance", label: "Governance", icon: CheckCircleIcon },
   { href: "/evaluations", label: "Evaluations", icon: CheckCircleIcon },
   { href: "/messages", label: "Messages", icon: DotsIcon },
   { href: "/approvals", label: "Approvals", icon: CheckCircleIcon },
   { href: "/audit", label: "Audit", icon: ListIcon },
 ];
 
-const ROADMAP = ["Rust engines", "Autoscaling loop", "Workflow execution"];
+const ROADMAP: string[] = [];
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -95,18 +97,22 @@ export function Sidebar() {
           );
         })}
 
-        <div className="px-2 pb-1 pt-5 text-[10px] font-medium uppercase tracking-wider text-ink-3">
-          Roadmap
-        </div>
-        {ROADMAP.map((label) => (
-          <div
-            key={label}
-            className="flex cursor-default items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-ink-3"
-          >
-            <LayersIcon className="h-4 w-4 shrink-0 opacity-60" />
-            {label}
-          </div>
-        ))}
+        {ROADMAP.length > 0 && (
+          <>
+            <div className="px-2 pb-1 pt-5 text-[10px] font-medium uppercase tracking-wider text-ink-3">
+              Roadmap
+            </div>
+            {ROADMAP.map((label) => (
+              <div
+                key={label}
+                className="flex cursor-default items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-ink-3"
+              >
+                <LayersIcon className="h-4 w-4 shrink-0 opacity-60" />
+                {label}
+              </div>
+            ))}
+          </>
+        )}
       </nav>
 
       {/* status card */}
