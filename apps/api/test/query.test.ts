@@ -1,6 +1,16 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { randomUUID } from "node:crypto";
-import type { CostAnalytics, LatencyAnalytics, Page, ReplayResult, TraceDetail, TraceSummary } from "@romanica/shared";
+import type {
+  AuditEventSummary,
+  CostAnalytics,
+  EvaluationAnalytics,
+  LatencyAnalytics,
+  ModelRoutingAnalytics,
+  Page,
+  ReplayResult,
+  TraceDetail,
+  TraceSummary,
+} from "@romanica/shared";
 import { createApp } from "../src/app.ts";
 import { sql } from "../src/db.ts";
 
@@ -8,9 +18,11 @@ const app = createApp();
 const KEY = "rom_dev_key";
 
 const traceId = randomUUID();
+const errorTraceId = randomUUID();
 const rootSpan = randomUUID();
 const llmSpan = randomUUID();
-const now = Date.now();
+const errorSpan = randomUUID();
+const now = Date.now() - 10_000;
 
 function authed(path: string) {
   return app.request(path, { headers: { authorization: `Bearer ${KEY}` } });
@@ -52,6 +64,34 @@ beforeAll(async () => {
           },
         ],
       },
+      {
+        traceId: errorTraceId,
+        name: "query-run-error",
+        status: "error",
+        startTime: now + 1_000,
+        endTime: now + 7_500,
+        metadata: { env: "test", feature: "query", expectedFailure: true },
+        spans: [
+          {
+            spanId: errorSpan,
+            parentSpanId: null,
+            type: "llm",
+            name: "expensive-generate",
+            status: "error",
+            startTime: now + 1_000,
+            endTime: now + 7_500,
+            input: { prompt: "fail" },
+            output: { text: "bad" },
+            error: { message: "model failed" },
+            attributes: {
+              model: "gpt-4o-mini",
+              promptTokens: 20,
+              completionTokens: 10,
+              costUsd: 0.00001,
+            },
+          },
+        ],
+      },
     ],
   };
   const res = await app.request("/v1/traces", {
@@ -63,7 +103,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await sql`DELETE FROM traces WHERE trace_id = ${traceId}`;
+  await sql`DELETE FROM audit_events WHERE target_id IN (${traceId}, ${errorTraceId})`;
+  await sql`DELETE FROM traces WHERE trace_id IN (${traceId}, ${errorTraceId})`;
 });
 
 test("GET /v1/traces lists the trace", async () => {
@@ -151,6 +192,7 @@ test("GET /v1/traces/:id round-trips bare-string input/output", async () => {
   expect(detail.spans[0]!.input).toBe("say hi");
   expect(detail.spans[0]!.output).toBe("hello there");
 
+  await sql`DELETE FROM audit_events WHERE target_id = ${id}`;
   await sql`DELETE FROM traces WHERE trace_id = ${id}`;
 });
 
@@ -188,4 +230,43 @@ test("GET /v1/analytics/latency returns percentiles", async () => {
   const llm = lat.byType.find((b) => b.type === "llm");
   expect(llm).toBeTruthy();
   expect(llm!.count).toBeGreaterThanOrEqual(1);
+});
+
+test("GET /v1/routing/models ranks observed model candidates", async () => {
+  const res = await authed("/v1/routing/models");
+  expect(res.status).toBe(200);
+  const routing = (await res.json()) as ModelRoutingAnalytics;
+  expect(routing.candidates.length).toBeGreaterThanOrEqual(2);
+  const gpt4o = routing.candidates.find((c) => c.model === "gpt-4o");
+  const mini = routing.candidates.find((c) => c.model === "gpt-4o-mini");
+  expect(gpt4o).toBeTruthy();
+  expect(mini).toBeTruthy();
+  expect(mini!.errorRate).toBeGreaterThan(0);
+  expect(mini!.recommendation).toBe("risky");
+});
+
+test("GET /v1/evaluations/summary returns trace-derived signals and cases", async () => {
+  const res = await authed("/v1/evaluations/summary?limit=10");
+  expect(res.status).toBe(200);
+  const evaluation = (await res.json()) as EvaluationAnalytics;
+  expect(evaluation.totalTraces).toBeGreaterThanOrEqual(2);
+  expect(evaluation.failedTraces).toBeGreaterThanOrEqual(1);
+  expect(evaluation.failureRate).toBeGreaterThan(0);
+  expect(evaluation.signals.some((s) => s.kind === "trace_failure")).toBe(true);
+  expect(evaluation.signals.some((s) => s.kind === "span_error")).toBe(true);
+  expect(evaluation.signals.some((s) => s.kind === "slow_span")).toBe(true);
+  const evaluationCase = evaluation.cases.find((c) => c.spanId === llmSpan);
+  expect(evaluationCase).toBeTruthy();
+  expect(evaluationCase!.model).toBe("gpt-4o");
+});
+
+test("GET /v1/audit/events returns project audit trail", async () => {
+  const res = await authed("/v1/audit/events?action=trace.ingest&limit=10");
+  expect(res.status).toBe(200);
+  const page = (await res.json()) as Page<AuditEventSummary>;
+  const event = page.items.find((item) => item.targetId === traceId);
+  expect(event).toBeTruthy();
+  expect(event!.action).toBe("trace.ingest");
+  expect(event!.targetType).toBe("trace_batch");
+  expect(event!.metadata.tracesReceived).toBe(2);
 });

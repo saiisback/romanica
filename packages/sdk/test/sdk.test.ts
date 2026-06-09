@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import type { IngestPayload, IngestTrace } from "@romanica/shared";
+import type { AgentMessageSummary, IngestPayload, IngestTrace } from "@romanica/shared";
 import { Romanica } from "../src/index.ts";
 
 /** Collect everything the SDK would export, instead of hitting the network. */
@@ -101,6 +101,70 @@ test("disabled client is a no-op and never exports", async () => {
   await client.flush();
   expect(result).toBe(42);
   expect(sent).toHaveLength(0);
+});
+
+test("publishes and acknowledges agent messages through the direct API", async () => {
+  const calls: string[] = [];
+  const client = new Romanica({
+    transport: async () => {},
+    direct: {
+      publishMessage: async (message) => {
+        calls.push(`publish:${message.channel}`);
+        return {
+          id: "msg_1",
+          projectId: "proj",
+          channel: message.channel,
+          sender: message.sender,
+          recipient: message.recipient ?? null,
+          traceId: message.traceId ?? null,
+          status: "pending",
+          payload: message.payload,
+          createdAt: new Date(0).toISOString(),
+          ackedAt: null,
+        } satisfies AgentMessageSummary;
+      },
+      ackMessage: async (id, status = "acknowledged") => {
+        calls.push(`ack:${id}:${status}`);
+        return {
+          id,
+          projectId: "proj",
+          channel: "handoff",
+          sender: "planner",
+          recipient: "worker",
+          traceId: null,
+          status,
+          payload: {},
+          createdAt: new Date(0).toISOString(),
+          ackedAt: new Date(1).toISOString(),
+        } satisfies AgentMessageSummary;
+      },
+    },
+  });
+
+  const message = await client.publishMessage({
+    channel: "handoff",
+    sender: "planner",
+    recipient: "worker",
+    payload: { task: "write summary" },
+  });
+  expect(message.id).toBe("msg_1");
+
+  const ack = await client.ackMessage(message.id, "failed");
+  expect(ack.status).toBe("failed");
+  expect(calls).toEqual(["publish:handoff", "ack:msg_1:failed"]);
+});
+
+test("disabled client message helpers resolve without network calls", async () => {
+  const client = new Romanica({ disabled: true });
+  const message = await client.publishMessage({
+    channel: "noop",
+    sender: "test",
+    payload: { ok: true },
+  });
+  expect(message.id).toBe("disabled");
+  expect(message.channel).toBe("noop");
+  const ack = await client.ackMessage("msg", "failed");
+  expect(ack.status).toBe("failed");
 });
 
 test("explicit span.span() nesting also builds the tree", async () => {

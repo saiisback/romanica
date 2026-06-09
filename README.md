@@ -16,6 +16,7 @@ Everything else is specced as roadmap but deliberately not built yet.
 - 📐 Vision / PRD: [`docs/romanica.md`](./docs/romanica.md)
 - 🗺️ Full 10-layer build doc: [`docs/BUILD.md`](./docs/BUILD.md)
 - 🟢 Active layer spec: [`docs/layer-4-observability.md`](./docs/layer-4-observability.md)
+- ✅ Current platform status: [`docs/platform-status.md`](./docs/platform-status.md)
 
 ---
 
@@ -158,6 +159,28 @@ Project  ──►  Trace (one full agent run)  ──►  Span (one step; nests
 | `GET`  | `/v1/traces/:id` | full trace with rehydrated span tree |
 | `GET`  | `/v1/analytics/cost` | token & cost aggregates over time |
 | `GET`  | `/v1/analytics/latency` | per-step latency distribution (p50/p95/p99) |
+| `POST` | `/v1/agents` | create/update an agent runtime definition |
+| `GET`  | `/v1/agents` | list agent runtime definitions |
+| `POST` | `/v1/runs` | queue an agent run request |
+| `GET`  | `/v1/runs` | list agent run requests |
+| `POST` | `/v1/runs/:id/status` | update run lifecycle status |
+| `GET`  | `/v1/routing/models` | observed model candidates for trace-fed routing policies |
+| `GET`  | `/v1/evaluations/summary` | trace-derived failure signals and exportable LLM cases |
+| `POST` | `/v1/messages` | publish a project-scoped agent message |
+| `GET`  | `/v1/messages` | list recent agent messages by channel/status |
+| `POST` | `/v1/messages/:id/ack` | acknowledge or fail an agent message |
+| `POST` | `/v1/workflows` | create/update a workflow definition |
+| `GET`  | `/v1/workflows` | list workflow definitions |
+| `GET`  | `/v1/workflows/:id` | get workflow definition detail |
+| `POST` | `/v1/memories` | create/update a project-scoped memory record |
+| `GET`  | `/v1/memories` | list active memories by kind/scope |
+| `GET`  | `/v1/memories/:id` | get memory detail |
+| `POST` | `/v1/pools` | create/update a worker pool capacity snapshot |
+| `GET`  | `/v1/pools` | list worker pool capacity and pressure |
+| `POST` | `/v1/approvals` | create a human approval checkpoint |
+| `GET`  | `/v1/approvals` | list approval checkpoints |
+| `POST` | `/v1/approvals/:id/decision` | approve/reject/cancel a checkpoint |
+| `GET`  | `/v1/audit/events` | project audit trail for ingest and replay events |
 
 All `/v1/*` routes require a `Bearer <api-key>` that resolves to a project.
 
@@ -228,27 +251,40 @@ The dashboard reads `API_URL` (default `http://localhost:4000`) and `ROMANICA_AP
 | `bun run db:migrate` | apply pending migrations (idempotent) |
 | `bun run db:reset` | wipe volumes, recreate, re-migrate |
 | `bun run scripts/seed.ts` | emit one realistic trace via the SDK |
+| `bun run scripts/seed-platform.ts` | seed trace + runtime/workflow/memory/pool/message/approval demo data |
 | `bun run scripts/smoke.ts` | end-to-end check: SDK → HTTP → API → DB |
+| `bun run scripts/check-dashboard.ts` | smoke API health + dashboard routes with servers running |
 
 ---
 
 ## Status
 
-Layer 4 ships in milestones M0–M7. **M0–M4 (the demoable MVP) are built, typecheck clean,
-and verified** — 14 tests pass (5 SDK unit + 9 API integration against live Postgres + MinIO),
-plus an end-to-end smoke and a live dashboard render.
+Layer 4 ships in milestones M0–M7. **M0–M7 are built, typecheck clean, and verified**
+when Postgres + MinIO are running — SDK core tests, adapter tests, replay unit tests, API
+integration tests, an end-to-end smoke, and the dashboard build.
 
 - [x] **M0** — Bun monorepo, shared span schema, Postgres migrations
 - [x] **M1** — SDK core (`trace()` / `span()`, auto-nesting, batched fail-silent export)
 - [x] **M2** — Ingest API (`POST /v1/traces`, auth, S3 blob offload, cost rollup)
 - [x] **M3** — Query API (list / detail-with-tree / cost + latency analytics)
 - [x] **M4** — Dashboard (trace list + detail: span tree, waterfall, input/output viewer)
-- [ ] **M5** — dedicated cost + latency dashboard views (analytics endpoints already exist)
-- [ ] **M6** — auto-instrument adapters: Vercel AI SDK, then LangChain.js (<10-line adoption)
-- [ ] **M7** — failure replay: re-run a failed trace from captured inputs
+- [x] **M5** — dedicated cost + latency dashboard views
+- [x] **M6** — auto-instrument adapters: Vercel AI SDK and LangChain.js
+- [x] **M7** — failure replay: re-run a failed trace from captured inputs
 
-**M0–M4 = the demoable MVP.** Next layers (L5 routing, L9 evaluation, …) stay on the roadmap
-until L4 has real depending users — that's the discipline that keeps the whole thing sane.
+**M0–M4 = the demoable MVP. M5–M7 = the sticky MVP.** Next layers (L5 routing, L9
+evaluation, …) stay full roadmap layers until L4 has real depending users. The repo now
+includes **trace-fed seeds** for both: `/routing` ranks observed models by cost, latency,
+and error rate, while `/evaluations` turns captured traces into failure signals and
+regression-test cases. It includes an L1 control-plane seed: `/agents` and `/runs` store
+runtime definitions and run lifecycle requests without executing user code. The L2 seed
+`/workflows` stores versioned workflow definitions without executing them. The L3 state seed
+is `/memories`, a scoped memory store that can link records back to traces, messages, or
+workflows. The L6 scaling seed is `/pools`, a worker-pool capacity and queue-pressure view.
+The L7 communication seed is `/messages` for project-scoped agent handoffs. The L10 collaboration seed is
+`/approvals`, a human checkpoint and decision trail. The L8 governance seed is `/audit`, an
+append-only project event trail for ingest, replay, memories, messages, pools, approvals,
+and workflow changes.
 
 ---
 

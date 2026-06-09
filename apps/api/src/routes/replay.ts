@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getTraceDetail } from "../queries.ts";
 import { ingestPayload } from "../ingest.ts";
+import { recordAuditEvent } from "../audit.ts";
 import { buildReplayPayload, makeOpenAIInvoker, replayTrace } from "../replay.ts";
 import type { Env } from "../http.ts";
 
@@ -33,6 +34,19 @@ replayRoutes.post("/v1/traces/:id/replay", async (c) => {
       result.replayTraceId = payload.traces[0]!.traceId;
     }
   }
+
+  await recordAuditEvent({
+    projectId: project.id,
+    action: "trace.replay",
+    targetType: "trace",
+    targetId: detail.traceId,
+    metadata: {
+      status: result.status,
+      steps: result.steps.length,
+      replayTraceId: result.replayTraceId ?? null,
+      persisted: Boolean(result.replayTraceId),
+    },
+  });
 
   return c.json(result);
 });

@@ -122,3 +122,187 @@ export interface ReplayResult {
   replayTraceId?: string;
   message?: string;
 }
+
+// --- model routing (Layer 5 seed) ---
+
+export interface ModelRoutingCandidate {
+  model: string;
+  calls: number;
+  errorRate: number;
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+  avgCostUsd: number;
+  avgTokens: number;
+  /** Lower is better. Cost, latency, and error rate are normalized together. */
+  score: number;
+  recommendation: "preferred" | "balanced" | "expensive" | "risky";
+}
+
+export interface ModelRoutingAnalytics {
+  window: { from: string; to: string };
+  candidates: ModelRoutingCandidate[];
+}
+
+// --- evaluation (Layer 9 seed) ---
+
+export interface EvaluationSignal {
+  kind: "trace_failure" | "span_error" | "slow_span";
+  traceId: string;
+  spanId?: string;
+  name: string;
+  severity: "low" | "medium" | "high";
+  message: string;
+}
+
+export interface EvaluationCase {
+  traceId: string;
+  spanId: string;
+  name: string;
+  model: string | null;
+  input: unknown;
+  expectedOutput: unknown;
+  metadata: Record<string, unknown>;
+}
+
+export interface EvaluationAnalytics {
+  window: { from: string; to: string };
+  totalTraces: number;
+  failedTraces: number;
+  failureRate: number;
+  replayTraces: number;
+  replayCoverage: number;
+  signals: EvaluationSignal[];
+  cases: EvaluationCase[];
+}
+
+// --- audit / governance (Layer 8 seed) ---
+
+export interface AuditEventSummary {
+  id: string;
+  projectId: string;
+  actorType: "api_key" | "system";
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+// --- agent communication (Layer 7 seed) ---
+
+export interface AgentMessageSummary {
+  id: string;
+  projectId: string;
+  channel: string;
+  sender: string;
+  recipient: string | null;
+  traceId: string | null;
+  status: "pending" | "acknowledged" | "failed";
+  payload: unknown;
+  createdAt: string;
+  ackedAt: string | null;
+}
+
+// --- workflow orchestration (Layer 2 seed) ---
+
+export interface WorkflowSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  version: string;
+  status: "draft" | "active" | "archived";
+  nodeCount: number;
+  edgeCount: number;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowDetail extends WorkflowSummary {
+  definition: unknown;
+}
+
+// --- state & memory (Layer 3 seed) ---
+
+export interface MemorySummary {
+  id: string;
+  projectId: string;
+  scope: string;
+  kind: "semantic" | "episodic" | "procedural" | "fact";
+  key: string;
+  content: unknown;
+  sourceType: string | null;
+  sourceId: string | null;
+  confidence: number | null;
+  expiresAt: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- scaling infrastructure (Layer 6 seed) ---
+
+export interface WorkerPoolSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  status: "active" | "draining" | "paused";
+  desiredWorkers: number;
+  activeWorkers: number;
+  queuedTasks: number;
+  runningTasks: number;
+  maxConcurrency: number;
+  utilization: number;
+  pressure: "idle" | "healthy" | "saturated";
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- human collaboration (Layer 10 seed) ---
+
+export interface ApprovalSummary {
+  id: string;
+  projectId: string;
+  title: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  requester: string;
+  assignee: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  payload: unknown;
+  decision: Record<string, unknown> | null;
+  dueAt: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- agent runtime (Layer 1 seed) ---
+
+export interface AgentDefinitionSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  version: string;
+  runtime: string;
+  entrypoint: string;
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentRunSummary {
+  id: string;
+  projectId: string;
+  agentId: string;
+  agentName: string;
+  agentVersion: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  input: unknown;
+  traceId: string | null;
+  error: SpanError | null;
+  queuedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}

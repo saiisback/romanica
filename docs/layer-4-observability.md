@@ -283,6 +283,29 @@ Bug fixed along the way:
   round-trip (regression test added). This directly matters for M7's output diff.
 
 What shipped beyond the original sketch, worth recording:
+- **L1 runtime seed.** `agent_definitions` and `agent_runs` plus `/v1/agents` and
+  `/v1/runs` store runtime definitions and run lifecycle requests. They are control-plane
+  records only; Romanica still does not execute user code in this layer.
+- **Trace-fed L5/L9 seeds.** L4 now exposes read-only downstream surfaces without
+  activating the full roadmap layers: `/v1/routing/models` ranks observed model
+  candidates by cost, latency, and error rate, and `/v1/evaluations/summary` turns
+  captured traces into failure signals plus exportable LLM regression cases. The
+  dashboard surfaces these at `/routing` and `/evaluations`.
+- **L2 orchestration seed.** `workflows` plus `/v1/workflows` store versioned workflow
+  definitions as control-plane objects. They do not execute yet; execution stays deferred
+  to the runtime/orchestration layers.
+- **L3 memory seed.** `memories` plus `/v1/memories` store scoped semantic/episodic/
+  procedural/fact records, with optional source links back to traces, messages, or
+  workflows. `/memories` exposes the active memory set.
+- **L6 scaling seed.** `worker_pools` plus `/v1/pools` track capacity snapshots, queue
+  depth, utilization, and pressure. `/pools` exposes the control-plane view; no autoscaler
+  loop runs yet.
+- **L8 governance seed.** Ingest and replay now append project-scoped audit events to
+  `audit_events`; `/v1/audit/events` and `/audit` expose the event trail.
+- **L7 communication seed.** `agent_messages` plus `/v1/messages` give projects a small
+  JSON message bus for agent handoffs; `/messages` lists recent channel activity.
+- **L10 collaboration seed.** `approvals` plus `/v1/approvals` create human checkpoints
+  and record approve/reject/cancel decisions. `/approvals` exposes the queue.
 - **Runtime is Bun**, not Node — `shared` is consumed as raw `.ts` (no build step);
   the API runs on `Bun.serve`; Postgres + S3 use Bun-native clients.
 - **Postgres dev port is `5433`** (container remapped to avoid clashing with a local

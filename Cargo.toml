@@ -1,0 +1,4 @@
+[workspace]
+members = ["engines/ingest-core"]
+resolver = "3"
+

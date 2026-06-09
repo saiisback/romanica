@@ -1,4 +1,4 @@
-import type { IngestPayload } from "@romanica/shared";
+import type { AgentMessageSummary, IngestPayload, PublishMessage } from "@romanica/shared";
 
 export interface RomanicaConfig {
   /** Project API key. Resolved to a project server-side. */
@@ -19,9 +19,16 @@ export interface RomanicaConfig {
   debug?: boolean;
   /** Inject a transport (testing). Defaults to fetch-based transport. */
   transport?: Transport;
+  /** Inject direct API calls (testing). Defaults to fetch-based calls. */
+  direct?: DirectApi;
   /** Clock injection (testing). Defaults to Date.now. */
   now?: () => number;
 }
 
 /** A transport ships one batch of traces. Must never throw. */
 export type Transport = (payload: IngestPayload) => Promise<void>;
+
+export interface DirectApi {
+  publishMessage(message: PublishMessage): Promise<AgentMessageSummary>;
+  ackMessage(id: string, status?: "acknowledged" | "failed"): Promise<AgentMessageSummary>;
+}

@@ -9,22 +9,31 @@ import {
   ChevronDownIcon,
   CheckCircleIcon,
   ClockIcon,
+  GitBranchIcon,
   LayersIcon,
+  ListIcon,
+  DotsIcon,
   SearchIcon,
 } from "./icons.tsx";
 
 const NAV = [
   { href: "/", label: "Overview", icon: BoxIcon },
   { href: "/?view=traces", label: "Traces", icon: ActivityIcon },
+  { href: "/agents", label: "Agents", icon: BoxIcon },
+  { href: "/runs", label: "Runs", icon: ActivityIcon },
   { href: "/analytics", label: "Analytics", icon: BarsIcon },
   { href: "/analytics#latency", label: "Latency", icon: ClockIcon },
+  { href: "/workflows", label: "Workflows", icon: LayersIcon },
+  { href: "/memories", label: "Memories", icon: BoxIcon },
+  { href: "/pools", label: "Pools", icon: BarsIcon },
+  { href: "/routing", label: "Routing", icon: GitBranchIcon },
+  { href: "/evaluations", label: "Evaluations", icon: CheckCircleIcon },
+  { href: "/messages", label: "Messages", icon: DotsIcon },
+  { href: "/approvals", label: "Approvals", icon: CheckCircleIcon },
+  { href: "/audit", label: "Audit", icon: ListIcon },
 ];
 
-const ROADMAP = [
-  "L5 · Model Routing",
-  "L9 · Evaluation",
-  "L1 · Agent Runtime",
-];
+const ROADMAP = ["Rust engines", "Autoscaling loop", "Workflow execution"];
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -41,7 +50,7 @@ export function Sidebar() {
             Romanica
           </span>
           <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-2 ring-1 ring-inset ring-line">
-            L4
+            L4+
           </span>
           <ChevronDownIcon className="h-3.5 w-3.5 text-ink-3" />
         </button>
@@ -108,8 +117,7 @@ export function Sidebar() {
             Layer 4 · Active
           </div>
           <p className="mt-1 text-[11px] leading-snug text-ink-2">
-            AgentOps &amp; Observability is live. Trace every run, replay any
-            failure.
+            AgentOps is live, with runtime seeds, workflows, memory, pools, approvals, and audit.
           </p>
         </div>
       </div>

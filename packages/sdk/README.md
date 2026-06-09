@@ -45,7 +45,7 @@ await romanica.trace("handle-ticket", async (trace) => {
 | `maxBatch` | `100` | max traces per request |
 | `disabled` | `false` | turn into a no-op |
 | `debug` | `false` | log export failures |
-| `transport` / `now` | — | injectable for tests |
+| `transport` / `direct` / `now` | — | injectable for tests |
 
 Call `await romanica.flush()` before a short-lived process exits, or
 `await romanica.shutdown()` on graceful shutdown.
@@ -90,3 +90,18 @@ Chains → `agent` spans, models → `llm`, tools → `tool`, retrievers →
 `setLLM({ model, provider, usage, costUsd, temperature, toolCalls })` ·
 `setTool({ toolName, args, result })` ·
 `setRetrieval({ query, topK, documents })`
+
+## Agent messages
+
+Publish project-scoped handoffs to the Layer 7 message bus:
+
+```ts
+const message = await romanica.publishMessage({
+  channel: "research-handoff",
+  sender: "planner",
+  recipient: "researcher",
+  payload: { topic: "refund policy", priority: 2 },
+});
+
+await romanica.ackMessage(message.id);
+```

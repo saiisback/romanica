@@ -1,9 +1,12 @@
 import { Hono } from "hono";
+import { listAuditEvents } from "../audit.ts";
 import {
   costAnalytics,
+  evaluationAnalytics,
   getTraceDetail,
   latencyAnalytics,
   listTraces,
+  modelRoutingAnalytics,
 } from "../queries.ts";
 import type { Env } from "../http.ts";
 
@@ -62,4 +65,31 @@ queryRoutes.get("/v1/analytics/latency", async (c) => {
   const project = c.get("project");
   const { from, to } = range(c);
   return c.json(await latencyAnalytics(project.id, { from, to }));
+});
+
+// GET /v1/routing/models — observed model candidates for Layer 5 routing policies
+queryRoutes.get("/v1/routing/models", async (c) => {
+  const project = c.get("project");
+  const { from, to } = range(c);
+  return c.json(await modelRoutingAnalytics(project.id, { from, to }));
+});
+
+// GET /v1/evaluations/summary — trace-derived evaluation signals and cases
+queryRoutes.get("/v1/evaluations/summary", async (c) => {
+  const project = c.get("project");
+  const { from, to } = range(c);
+  const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 25) || 25));
+  return c.json(await evaluationAnalytics(project.id, { from, to, limit }));
+});
+
+// GET /v1/audit/events — project audit trail for Layer 8 governance
+queryRoutes.get("/v1/audit/events", async (c) => {
+  const project = c.get("project");
+  const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 50) || 50));
+  return c.json(
+    await listAuditEvents(project.id, {
+      action: c.req.query("action"),
+      limit,
+    }),
+  );
 });

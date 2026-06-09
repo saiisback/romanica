@@ -1,7 +1,12 @@
 import {
   buildSpanTree,
   type CostAnalytics,
+  type EvaluationAnalytics,
+  type EvaluationCase,
+  type EvaluationSignal,
   type LatencyAnalytics,
+  type ModelRoutingAnalytics,
+  type ModelRoutingCandidate,
   type Page,
   type SpanNode,
   type TraceDetail,
@@ -262,5 +267,166 @@ export async function latencyAnalytics(
       p99Ms: num(r.p99),
       count: num(r.count),
     })),
+  };
+}
+
+// ---------- model routing (Layer 5 seed) ----------
+
+export async function modelRoutingAnalytics(
+  projectId: string,
+  params: RangeParams,
+): Promise<ModelRoutingAnalytics> {
+  const rows = (await sql`
+    SELECT attributes->>'model' AS model,
+      COUNT(*) AS calls,
+      AVG(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error_rate,
+      COALESCE(AVG(duration_ms), 0) AS avg_latency,
+      COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms), 0) AS p95_latency,
+      COALESCE(AVG(COALESCE((attributes->>'costUsd')::numeric, 0)), 0) AS avg_cost,
+      COALESCE(AVG(
+        COALESCE((attributes->>'totalTokens')::numeric,
+          COALESCE((attributes->>'promptTokens')::numeric, 0)
+          + COALESCE((attributes->>'completionTokens')::numeric, 0))
+      ), 0) AS avg_tokens
+    FROM spans
+    WHERE project_id = ${projectId} AND type = 'llm'
+      AND attributes->>'model' IS NOT NULL
+      AND start_time >= ${params.from} AND start_time <= ${params.to}
+    GROUP BY 1
+  `) as any[];
+
+  const raw = rows.map((r) => ({
+    model: String(r.model),
+    calls: num(r.calls),
+    errorRate: num(r.error_rate),
+    avgLatencyMs: num(r.avg_latency),
+    p95LatencyMs: num(r.p95_latency),
+    avgCostUsd: num(r.avg_cost),
+    avgTokens: num(r.avg_tokens),
+  }));
+
+  const maxCost = Math.max(...raw.map((r) => r.avgCostUsd), 0.000001);
+  const maxP95 = Math.max(...raw.map((r) => r.p95LatencyMs), 1);
+
+  const candidates: ModelRoutingCandidate[] = raw
+    .map((r) => {
+      const score =
+        (r.avgCostUsd / maxCost) * 0.35 +
+        (r.p95LatencyMs / maxP95) * 0.35 +
+        r.errorRate * 0.3;
+      const recommendation: ModelRoutingCandidate["recommendation"] =
+        r.errorRate >= 0.2
+          ? "risky"
+          : r.avgCostUsd / maxCost >= 0.85 && raw.length > 1
+            ? "expensive"
+            : score <= 0.45
+              ? "preferred"
+              : "balanced";
+      return { ...r, score: Number(score.toFixed(4)), recommendation };
+    })
+    .sort((a, b) => a.score - b.score || b.calls - a.calls || a.model.localeCompare(b.model));
+
+  return {
+    window: { from: params.from.toISOString(), to: params.to.toISOString() },
+    candidates,
+  };
+}
+
+// ---------- evaluation (Layer 9 seed) ----------
+
+export async function evaluationAnalytics(
+  projectId: string,
+  params: RangeParams & { limit: number },
+): Promise<EvaluationAnalytics> {
+  const traceRows = (await sql`
+    SELECT
+      COUNT(*) AS total,
+      COUNT(*) FILTER (WHERE status = 'error') AS failed,
+      COUNT(*) FILTER (WHERE metadata->>'kind' = 'replay') AS replay_traces,
+      COUNT(DISTINCT metadata->>'replayOf') FILTER (WHERE metadata->>'replayOf' IS NOT NULL) AS replayed_sources
+    FROM traces
+    WHERE project_id = ${projectId}
+      AND start_time >= ${params.from} AND start_time <= ${params.to}
+  `) as any[];
+  const totals = traceRows[0] ?? {};
+  const totalTraces = num(totals.total);
+  const failedTraces = num(totals.failed);
+  const replayTraces = num(totals.replay_traces);
+  const replayedSources = num(totals.replayed_sources);
+
+  const signalRows = (await sql`
+    (
+      SELECT 'trace_failure' AS kind, t.trace_id, NULL::uuid AS span_id, t.name,
+             'high' AS severity, 'trace finished with error status' AS message,
+             t.start_time AS sort_time
+      FROM traces t
+      WHERE t.project_id = ${projectId} AND t.status = 'error'
+        AND t.start_time >= ${params.from} AND t.start_time <= ${params.to}
+    )
+    UNION ALL
+    (
+      SELECT 'span_error' AS kind, s.trace_id, s.span_id, s.name,
+             'high' AS severity, COALESCE(s.error->>'message', 'span finished with error status') AS message,
+             s.start_time AS sort_time
+      FROM spans s
+      WHERE s.project_id = ${projectId} AND s.status = 'error'
+        AND s.start_time >= ${params.from} AND s.start_time <= ${params.to}
+    )
+    UNION ALL
+    (
+      SELECT 'slow_span' AS kind, s.trace_id, s.span_id, s.name,
+             'medium' AS severity, ('slow span: ' || s.duration_ms || 'ms') AS message,
+             s.start_time AS sort_time
+      FROM spans s
+      WHERE s.project_id = ${projectId} AND s.duration_ms >= 5000
+        AND s.start_time >= ${params.from} AND s.start_time <= ${params.to}
+    )
+    ORDER BY sort_time DESC
+    LIMIT ${params.limit}
+  `) as any[];
+
+  const caseRows = (await sql`
+    SELECT s.trace_id, s.span_id, s.name, s.input, s.output, s.attributes, t.metadata
+    FROM spans s
+    JOIN traces t ON t.trace_id = s.trace_id
+    WHERE s.project_id = ${projectId} AND s.type = 'llm'
+      AND s.input IS NOT NULL AND s.output IS NOT NULL
+      AND s.start_time >= ${params.from} AND s.start_time <= ${params.to}
+      AND COALESCE(t.metadata->>'kind', '') <> 'replay'
+    ORDER BY s.start_time DESC
+    LIMIT ${params.limit}
+  `) as any[];
+
+  const signals: EvaluationSignal[] = signalRows.map((r) => ({
+    kind: r.kind,
+    traceId: r.trace_id,
+    spanId: r.span_id ?? undefined,
+    name: r.name,
+    severity: r.severity,
+    message: r.message,
+  }));
+
+  const cases: EvaluationCase[] = caseRows.map((r) => {
+    const attributes = asObject<Record<string, unknown>>(r.attributes, {});
+    return {
+      traceId: r.trace_id,
+      spanId: r.span_id,
+      name: r.name,
+      model: typeof attributes.model === "string" ? attributes.model : null,
+      input: asObject(r.input, null),
+      expectedOutput: asObject(r.output, null),
+      metadata: asObject(r.metadata, {}),
+    };
+  });
+
+  return {
+    window: { from: params.from.toISOString(), to: params.to.toISOString() },
+    totalTraces,
+    failedTraces,
+    failureRate: totalTraces === 0 ? 0 : failedTraces / totalTraces,
+    replayTraces,
+    replayCoverage: totalTraces === 0 ? 0 : replayedSources / totalTraces,
+    signals,
+    cases,
   };
 }

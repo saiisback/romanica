@@ -1,13 +1,15 @@
 import { Trace } from "./trace.ts";
 import { Exporter, NoopExporter, type IExporter } from "./exporter.ts";
-import { httpTransport } from "./transport.ts";
+import { httpDirectApi, httpTransport } from "./transport.ts";
 import { traceContext } from "./context.ts";
-import type { RomanicaConfig } from "./types.ts";
+import type { AgentMessageSummary, PublishMessage } from "@romanica/shared";
+import type { DirectApi, RomanicaConfig } from "./types.ts";
 
 const DEFAULT_ENDPOINT = "http://localhost:4000";
 
 export class Romanica {
   private readonly exporter: IExporter;
+  private readonly direct: DirectApi;
   private readonly now: () => number;
 
   constructor(config: RomanicaConfig = {}) {
@@ -15,12 +17,14 @@ export class Romanica {
 
     if (config.disabled) {
       this.exporter = new NoopExporter();
+      this.direct = noopDirectApi();
       return;
     }
 
     const endpoint = config.endpoint ?? process.env.ROMANICA_ENDPOINT ?? DEFAULT_ENDPOINT;
     const apiKey = config.apiKey ?? process.env.ROMANICA_API_KEY;
     const transport = config.transport ?? httpTransport({ endpoint, apiKey });
+    this.direct = config.direct ?? httpDirectApi({ endpoint, apiKey });
 
     this.exporter = new Exporter({
       transport,
@@ -67,6 +71,19 @@ export class Romanica {
     return this.exporter.shutdown();
   }
 
+  /** Publish a project-scoped agent message to the Layer 7 message bus. */
+  publishMessage(message: PublishMessage): Promise<AgentMessageSummary> {
+    return this.direct.publishMessage(message);
+  }
+
+  /** Acknowledge or fail a previously published agent message. */
+  ackMessage(
+    id: string,
+    status: "acknowledged" | "failed" = "acknowledged",
+  ): Promise<AgentMessageSummary> {
+    return this.direct.ackMessage(id, status);
+  }
+
   private registerExitFlush(): void {
     if (typeof process === "undefined" || typeof process.once !== "function") return;
     const flush = () => {
@@ -74,4 +91,33 @@ export class Romanica {
     };
     process.once("beforeExit", flush);
   }
+}
+
+function noopDirectApi(): DirectApi {
+  return {
+    publishMessage: async (message) => ({
+      id: "disabled",
+      projectId: "disabled",
+      channel: message.channel,
+      sender: message.sender,
+      recipient: message.recipient ?? null,
+      traceId: message.traceId ?? null,
+      status: "pending",
+      payload: message.payload,
+      createdAt: new Date(0).toISOString(),
+      ackedAt: null,
+    }),
+    ackMessage: async (id, status = "acknowledged") => ({
+      id,
+      projectId: "disabled",
+      channel: "disabled",
+      sender: "disabled",
+      recipient: null,
+      traceId: null,
+      status,
+      payload: {},
+      createdAt: new Date(0).toISOString(),
+      ackedAt: new Date(0).toISOString(),
+    }),
+  };
 }
